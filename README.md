@@ -6,13 +6,14 @@ one-way dependency flow, so the next module (layouts, voice input, suggestions�
 touching the existing ones.
 
 ```
-:app          settings + live preview (Compose)      — the only module with UI framework deps
+:app            settings, AI provider config, live preview (Compose) — the only module with UI framework deps
    │
    ▼
-:keyboard     the IME: InputMethodService + MiniKeyboardView   (framework APIs only)
+:keyboard       the IME: InputMethodService + MiniKeyboardView   (framework APIs only)
    │
    ▼
 :core:settings  KeyboardSettings / KeyboardTheme / persistence codec  (no UI, no third-party deps)
+:core:llm       OpenAI-compatible LLM client + Keystore key vault     (no third-party deps)
 ```
 
 Nothing depends upwards. `:core:settings` is pure Kotlin + SharedPreferences, which is why its
