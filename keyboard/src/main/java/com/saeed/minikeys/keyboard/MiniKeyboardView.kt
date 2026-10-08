@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -12,6 +13,7 @@ import android.util.TypedValue
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
 
@@ -51,8 +53,23 @@ class MiniKeyboardView(context: Context) : View(context) {
     private val sidePadding = dp(4f)
     private val topPadding = dp(6f)
     private val bottomPadding = dp(8f)
-    private val cornerRadius = dp(7f)
 
+    /**
+     * Bottom room reserved for the system navigation bar / gesture pill. Starts at 0 and is set from
+     * real window insets the moment the view is attached.
+     */
+    private var systemBarBottomPaddingPx: Int = 0
+
+    /*
+     * Fallback for hosts/layers that report a 0 navigation-bar inset (seen with edge-to-edge IME
+     * windows). Uses the platform's own bar height so the keyboard never relies on a guessed value.
+     */
+    private val navigationBarFallbackPx: Int = run {
+        val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        if (id > 0) resources.getDimensionPixelSize(id) else 0
+    }
+
+    private val cornerRadius = dp(7f)
     private var page: KeyboardPage = KeyboardPage.LETTERS
     private var shift: ShiftState = ShiftState.OFF
     private var enterLabel: String = DEFAULT_ENTER_LABEL
@@ -182,7 +199,34 @@ class MiniKeyboardView(context: Context) : View(context) {
         return super.onTouchEvent(event)
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // The same listener runs in every host (IME window and the settings preview) so both keep
+        // the bottom row above the navigation bar / gesture pill.
+        setOnApplyWindowInsetsListener { _, insets ->
+            updateSystemBarBottomPadding(insets)
+            insets
+        }
+        requestApplyInsets()
+    }
+
+    private fun updateSystemBarBottomPadding(insets: WindowInsets) {
+        val bottom = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            insets.getInsets(WindowInsets.Type.navigationBars() or WindowInsets.Type.displayCutout()).bottom
+                .coerceAtLeast(navigationBarFallbackPx)
+        } else {
+            @Suppress("DEPRECATION")
+            insets.systemWindowInsetBottom.coerceAtLeast(navigationBarFallbackPx)
+        }
+        if (bottom != systemBarBottomPaddingPx) {
+            systemBarBottomPaddingPx = bottom
+            rebuildGeometry()
+            invalidate()
+        }
+    }
+
     override fun onDetachedFromWindow() {
+        setOnApplyWindowInsetsListener(null)
         clearPress()
         super.onDetachedFromWindow()
     }
@@ -273,7 +317,13 @@ class MiniKeyboardView(context: Context) : View(context) {
             return
         }
 
-        val rowHeight = (viewHeight - topPadding - bottomPadding - verticalGap * (rows.size - 1)) / rows.size
+        val rowHeight = (
+            viewHeight
+                - topPadding
+                - bottomPadding
+                - systemBarBottomPaddingPx
+                - verticalGap * (rows.size - 1)
+            ) / rows.size
         if (rowHeight <= 0f) {
             geometry = emptyList()
             return
