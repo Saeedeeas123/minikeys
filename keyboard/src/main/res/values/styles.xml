@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The IME window adds no chrome of its own: MiniKeyboardView paints the entire surface, so the
+        window background must be transparent (a light default background would flash white on show).
+    -->
+    <style name="MiniKeysImeTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

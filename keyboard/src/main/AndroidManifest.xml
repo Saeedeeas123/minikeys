@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!--
+            The IME. `BIND_INPUT_METHOD` guarantees only the system can bind to it; the intent filter
+            is what makes it appear in the system keyboard list.
+        -->
+        <service
+            android:name="com.saeed.minikeys.keyboard.KeyboardService"
+            android:exported="true"
+            android:icon="@drawable/ic_minikeys"
+            android:label="@string/ime_name"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:theme="@style/MiniKeysImeTheme">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
+    </application>
+
+</manifest>

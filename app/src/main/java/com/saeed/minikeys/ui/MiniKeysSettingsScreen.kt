@@ -1,0 +1,324 @@
+package com.saeed.minikeys.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.saeed.minikeys.core.settings.KeyboardSettings
+import com.saeed.minikeys.core.settings.KeyboardTheme
+import kotlin.math.roundToInt
+
+private const val HEIGHT_STEP_DP = 10
+
+/**
+ * The one settings screen of the keyboard module:
+ *  - enable/select the IME,
+ *  - choose a theme and a size (written to disk on every change),
+ *  - see those saved values immediately, both in a live preview and as raw stored values.
+ */
+@Composable
+fun MiniKeysSettingsScreen(state: SettingsScreenState) {
+    val buffer = remember { TestFieldBuffer() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "MiniKeys",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "Keyboard module v0.1.0 — every change below is saved and applied to the keyboard " +
+                "immediately, no restart needed.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        StatusCard(state)
+        ThemeCard(state)
+        SizeCard(state)
+        PreviewCard(state, buffer)
+        SavedSettingsCard(state)
+    }
+}
+
+@Composable
+private fun StatusCard(state: SettingsScreenState) {
+    SectionCard(title = "Keyboard status") {
+        StatusRow(label = "Enabled in system settings", value = state.imeStatus.enabled)
+        StatusRow(label = "Selected as the current keyboard", value = state.imeStatus.selected)
+
+        Row(
+            modifier = Modifier.padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(onClick = { state.openSystemKeyboardSettings() }) { Text("Enable") }
+            OutlinedButton(onClick = { state.showKeyboardPicker() }) { Text("Choose keyboard") }
+        }
+
+        Text(
+            text = "Enable → tick MiniKeys, then Choose keyboard → pick MiniKeys. The status above " +
+                "refreshes every time this screen comes back to the front.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun StatusRow(label: String, value: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = if (value) "YES" else "NO",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (value) Color(0xFF2E7D32) else Color(0xFFB3261E),
+        )
+    }
+}
+
+@Composable
+private fun ThemeCard(state: SettingsScreenState) {
+    SectionCard(title = "Theme") {
+        KeyboardTheme.ALL.forEach { theme ->
+            ThemeRow(
+                theme = theme,
+                selected = theme.id == state.settings.themeId,
+                onSelect = { state.selectTheme(theme.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeRow(theme: KeyboardTheme, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+            )
+            .clickable(onClick = onSelect)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(theme.keyBackground))
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(text = theme.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = if (selected) "Selected" else "",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun SizeCard(state: SettingsScreenState) {
+    SectionCard(title = "Size") {
+        SliderRow(
+            label = "Keyboard height",
+            valueText = "${state.settings.keyboardHeightDp} dp",
+            value = state.settings.keyboardHeightDp.toFloat(),
+            range = KeyboardSettings.MIN_HEIGHT_DP.toFloat()..KeyboardSettings.MAX_HEIGHT_DP.toFloat(),
+            steps = ((KeyboardSettings.MAX_HEIGHT_DP - KeyboardSettings.MIN_HEIGHT_DP) / HEIGHT_STEP_DP) - 1,
+            onChange = { state.setKeyboardHeightDp(it.roundToInt()) },
+        )
+        SliderRow(
+            label = "Key label size",
+            valueText = "${state.settings.keyTextSizeSp} sp",
+            value = state.settings.keyTextSizeSp.toFloat(),
+            range = KeyboardSettings.MIN_TEXT_SIZE_SP.toFloat()..KeyboardSettings.MAX_TEXT_SIZE_SP.toFloat(),
+            steps = (KeyboardSettings.MAX_TEXT_SIZE_SP - KeyboardSettings.MIN_TEXT_SIZE_SP) - 1,
+            onChange = { state.setKeyTextSizeSp(it.roundToInt()) },
+        )
+        OutlinedButton(
+            onClick = { state.resetToDefaults() },
+            modifier = Modifier.padding(top = 6.dp),
+        ) {
+            Text("Reset to defaults")
+        }
+    }
+}
+
+@Composable
+private fun SliderRow(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onChange: (Float) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = range,
+            steps = steps,
+        )
+    }
+}
+
+@Composable
+private fun PreviewCard(state: SettingsScreenState, buffer: TestFieldBuffer) {
+    SectionCard(title = "Saved settings on the keyboard") {
+        KeyboardPreview(
+            settings = state.settings,
+            buffer = buffer,
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)),
+        )
+        Text(
+            text = "This preview is the real keyboard view, drawn from the saved settings. Tap its " +
+                "keys to type into the test field below.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        TestField(
+            buffer = buffer,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .height(96.dp),
+        )
+    }
+}
+
+@Composable
+private fun SavedSettingsCard(state: SettingsScreenState) {
+    val snapshot = state.savedSnapshot
+
+    SectionCard(title = "Persisted values (read back from disk)") {
+        KeyValueRow("Theme", snapshot.settings.themeId)
+        KeyValueRow("Keyboard height", "${snapshot.settings.keyboardHeightDp} dp")
+        KeyValueRow("Key label size", "${snapshot.settings.keyTextSizeSp} sp")
+        KeyValueRow("Last write", state.savedAtText())
+
+        Text(
+            text = if (snapshot.fileExists) {
+                "Preferences file: ${snapshot.filePath}"
+            } else {
+                "Preferences file not written yet: ${snapshot.filePath}"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Raw entries",
+            style = MaterialTheme.typography.labelLarge,
+        )
+        if (snapshot.rawEntries.isEmpty()) {
+            Text(
+                text = "(empty — the keyboard is running on defaults)",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        } else {
+            snapshot.rawEntries.forEach { (key, value) ->
+                KeyValueRow(key, value, monospace = true)
+            }
+        }
+
+        OutlinedButton(
+            onClick = { state.refreshFromDisk() },
+            modifier = Modifier.padding(top = 10.dp),
+        ) {
+            Text("Reload from disk")
+        }
+    }
+}
+
+@Composable
+private fun KeyValueRow(key: String, value: String, monospace: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+    ) {
+        Text(
+            text = key,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = if (monospace) FontFamily.Monospace else null,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = if (monospace) FontFamily.Monospace else null,
+        )
+    }
+}
+
+@Composable
+private fun SectionCard(title: String, content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            content()
+        }
+    }
+}

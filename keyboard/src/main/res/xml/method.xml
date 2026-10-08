@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Input-method descriptor. Android 11+ requires an explicit subtype, otherwise the keyboard shows
+    up as unusable/empty in the system keyboard list. settingsActivity points at the settings screen
+    of :app so the system gear icon opens our own settings.
+-->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.saeed.minikeys.MainActivity"
+    android:supportsSwitchingToNextInputMethod="false">
+
+    <subtype
+        android:isAsciiCapable="true"
+        android:imeSubtypeLocale="en_US"
+        android:imeSubtypeMode="keyboard"
+        android:label="@string/subtype_en_us" />
+
+</input-method>
