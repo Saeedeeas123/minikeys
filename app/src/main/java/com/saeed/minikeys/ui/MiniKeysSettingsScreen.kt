@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +25,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,11 +34,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
+import com.saeed.minikeys.core.llm.LlmProviderPreset
 import kotlin.math.roundToInt
 
 private const val HEIGHT_STEP_DP = 10
@@ -48,7 +55,9 @@ private const val HEIGHT_STEP_DP = 10
  */
 @Composable
 fun MiniKeysSettingsScreen(state: SettingsScreenState) {
+    val context = LocalContext.current
     val buffer = remember { TestFieldBuffer() }
+    val aiState = remember { AiSettingsState(context) }
 
     Column(
         modifier = Modifier
@@ -72,6 +81,7 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
         StatusCard(state)
         ThemeCard(state)
         SizeCard(state)
+        AiCard(aiState)
         PreviewCard(state, buffer)
         SavedSettingsCard(state)
     }
@@ -214,6 +224,100 @@ private fun SliderRow(
             steps = steps,
         )
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AiCard(aiState: AiSettingsState) {
+    SectionCard(title = "AI provider (OpenAI-compatible)") {
+        Text(
+            text = "Any endpoint that speaks the OpenAI chat schema works — cloud providers or a " +
+                "local server (llama.cpp / Ollama / LM Studio on your LAN). The API key is stored " +
+                "encrypted with the Android Keystore, never as plain text.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        LabeledField(
+            label = "Base URL",
+            value = aiState.baseUrl,
+            onValue = { aiState.baseUrl = it },
+        )
+        LabeledField(
+            label = "Model",
+            value = aiState.model,
+            onValue = { aiState.model = it },
+        )
+        LabeledField(
+            label = "API key",
+            value = aiState.apiKey,
+            onValue = { aiState.apiKey = it },
+            hideValue = true,
+        )
+
+        Text(
+            text = "Quick presets — they fill the URL and an example model; edit both freely:",
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            LlmProviderPreset.ALL.forEach { preset ->
+                OutlinedButton(
+                    onClick = { aiState.applyPreset(preset) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp, vertical = 4.dp,
+                    ),
+                ) {
+                    Text(preset.label, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                aiState.saveConfig()
+                aiState.runTest()
+            },
+            enabled = !aiState.testing,
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Text(if (aiState.testing) "Testing…" else "Save & Test")
+        }
+
+        if (aiState.testStatus.isNotBlank()) {
+            Text(
+                text = aiState.testStatus,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LabeledField(
+    label: String,
+    value: String,
+    onValue: (String) -> Unit,
+    hideValue: Boolean = false,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValue,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (hideValue) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+    )
 }
 
 @Composable

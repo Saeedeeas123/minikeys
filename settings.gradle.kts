@@ -27,3 +27,4 @@ rootProject.name = "MiniKeys"
 include(":app")
 include(":keyboard")
 include(":core:settings")
+include(":core:llm")
