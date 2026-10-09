@@ -46,6 +46,7 @@ import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
 import com.saeed.minikeys.core.llm.LlmProviderPreset
 import com.saeed.minikeys.core.mediapipe.LocalModelFormats
+import com.saeed.minikeys.core.llama.LlamaModelFormats
 import kotlin.math.roundToInt
 
 private const val HEIGHT_STEP_DP = 10
@@ -62,6 +63,7 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
     val buffer = remember { TestFieldBuffer() }
     val aiState = remember { AiSettingsState(context) }
     val localState = remember { LocalLlmState(context) }
+    val llamaState = remember { LlamaCppState(context) }
 
     Column(
         modifier = Modifier
@@ -87,6 +89,7 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
         SizeCard(state)
         AiCard(aiState)
         LocalModelCard(localState)
+        LlamaGgufCard(llamaState)
         PreviewCard(state, buffer)
         SavedSettingsCard(state)
     }
@@ -565,5 +568,96 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
             Spacer(Modifier.height(8.dp))
             content()
         }
+    }
+}
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LlamaGgufCard(llamaState: LlamaCppState) {
+    SectionCard(title = "GGUF model (llama.cpp, offline)") {
+        Text(
+            text = "Runs fully on the phone through llama.cpp — no network needed for inference. " +
+                "Supported files: .gguf. The same models folder serves both offline engines.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        Text(
+            text = "Selected: ${llamaState.selectedModelPath.ifBlank { "none" }}",
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+
+        val pickModel = rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri -> uri?.let { llamaState.copyPickedDocument(it) } }
+
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(onClick = { pickModel.launch(arrayOf("*/*")) }) { Text("Pick from device") }
+            OutlinedButton(onClick = { llamaState.refresh() }) { Text("Refresh list") }
+        }
+
+        llamaState.modelFiles.forEach { file ->
+            ModelFileRow(
+                file = file,
+                supported = LlamaModelFormats.isSupported(file.name),
+                selected = file.absolutePath == llamaState.selectedModelPath,
+                onSelect = { llamaState.select(file.absolutePath) },
+            )
+        }
+
+        LabeledField(
+            label = "Hugging Face repository (user/model)",
+            value = llamaState.hfRepo,
+            onValue = { llamaState.hfRepo = it },
+        )
+        LabeledField(
+            label = "File name in the repository",
+            value = llamaState.hfFileName,
+            onValue = { llamaState.hfFileName = it },
+        )
+        LabeledField(
+            label = "Hugging Face token (gated repos only)",
+            value = llamaState.hfToken,
+            onValue = { llamaState.hfToken = it },
+            hideValue = true,
+        )
+
+        Button(
+            onClick = { llamaState.downloadFromHuggingFace() },
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Text("Download from Hugging Face")
+        }
+
+        if (llamaState.downloadProgress.isNotBlank()) {
+            Text(
+                text = llamaState.downloadProgress,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = { llamaState.testModel() },
+                enabled = !llamaState.testing,
+            ) {
+                Text(if (llamaState.testing) "Loading…" else "Test GGUF model")
+            }
+            OutlinedButton(onClick = { llamaState.unloadModel() }) { Text("Unload from memory") }
+        }
+
+        Text(
+            text = llamaState.operationStatus,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
