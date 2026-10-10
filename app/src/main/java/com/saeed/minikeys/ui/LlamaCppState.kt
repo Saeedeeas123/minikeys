@@ -159,11 +159,14 @@ class LlamaCppState(context: Context) {
             var fastestMs = Long.MAX_VALUE
             var lastText = ""
             val result = try {
-                val engine = LocalLlamaRuntime.get(path, TEST_OPTIONS)
+                // A fresh session with the stress options: the runtime cache keys on the model
+                // path alone, so without this the loop could inherit Test's 64-token settings.
+                LocalLlamaRuntime.close()
+                val engine = LocalLlamaRuntime.get(path, STRESS_OPTIONS)
                 MiniKeysLog.line("LLAMA stress loaded: " + engine.nativeDescription)
                 for (i in 1..repeats) {
                     try {
-                        val reply = engine.chat(listOf(ChatMessage("user", TEST_PROMPT)))
+                        val reply = engine.chat(listOf(ChatMessage("user", STRESS_PROMPT)))
                         totalMs += reply.latencyMs
                         slowestMs = maxOf(slowestMs, reply.latencyMs)
                         fastestMs = minOf(fastestMs, reply.latencyMs)
@@ -187,7 +190,9 @@ class LlamaCppState(context: Context) {
                 val avg = if (repeats > 0) totalMs / repeats else 0L
                 val fastest = if (fastestMs == Long.MAX_VALUE) "n/a" else "$fastestMs ms"
                 val verdict = if (failed == 0 && empty == 0) "LLAMA STRESS PASS" else "LLAMA STRESS FAIL"
-                verdict + " - " + repeats + " calls on one loaded session: ok=" + ok +
+                verdict + " - " + repeats + " calls on one loaded session (ctx=" +
+                    STRESS_OPTIONS.normalized().context + ", maxTokens=" +
+                    STRESS_OPTIONS.normalized().maxTokens + "): ok=" + ok +
                     " empty=" + empty + " failed=" + failed + " | avg=" + avg + " ms, fastest=" +
                     fastest + ", slowest=" + slowestMs + " ms | last reply: " +
                     (34).toChar() + lastText.take(60) + (34).toChar() +
@@ -254,8 +259,17 @@ class LlamaCppState(context: Context) {
         /** Greedy decoding: the acceptance test must be deterministic. */
         val TEST_OPTIONS = LlamaCppOptions(maxTokens = 64, temp = 0.0f)
 
-        /** Exactly the same prompt for every call, so the stress loop is comparable. */
+        /** Exactly the same prompt for every call, so the acceptance test is comparable. */
         const val TEST_PROMPT = "Reply to this message with exactly: OK"
+
+        /**
+         * Stress test settings, chosen so the loop can actually fail:
+         * a small context (512) plus a prompt whose greedy answer is long (~150 positions per
+         * call) exhausts a session that never releases its KV cache within a few calls, while a
+         * healthy session finishes all [STRESS_REPEATS] calls.
+         */
+        val STRESS_OPTIONS = LlamaCppOptions(context = 512, maxTokens = 128, temp = 0.0f)
+        const val STRESS_PROMPT = "Count from 1 to 40, one number per line."
         const val STRESS_REPEATS = 20
 
         /** Editable example defaults; a public GGUF mirror of the 270M model. */
