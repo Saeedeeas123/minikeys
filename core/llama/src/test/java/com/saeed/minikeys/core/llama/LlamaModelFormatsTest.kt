@@ -27,4 +27,23 @@ class LlamaModelFormatsTest {
         assertEquals("___", LlamaModelFileNames.sanitize("///"))
         assertEquals("gemma_3_270m.gguf", LlamaModelFileNames.sanitize("gemma 3 270m.gguf"))
     }
+
+    @Test
+    fun `gguf magic separates real headers from garbage`() {
+        val good = java.io.File.createTempFile("model", ".gguf")
+        good.writeBytes(byteArrayOf(0x47, 0x47, 0x55, 0x46, 0x03))
+        val bad = java.io.File.createTempFile("model", ".gguf")
+        bad.writeBytes(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+        val empty = java.io.File.createTempFile("model", ".gguf")
+        try {
+            assertTrue(LlamaModelFormats.hasGgufMagic(good))
+            assertFalse(LlamaModelFormats.hasGgufMagic(bad))
+            assertFalse(LlamaModelFormats.hasGgufMagic(empty))
+            assertFalse(LlamaModelFormats.hasGgufMagic(java.io.File("/tmp/minikeys-does-not-exist.gguf")))
+        } finally {
+            good.delete()
+            bad.delete()
+            empty.delete()
+        }
+    }
 }

@@ -64,4 +64,22 @@ class LocalEngineLogicTest {
         assertTrue(prompt.contains("User: Say OK"))
         assertTrue(prompt.trimEnd().endsWith("Assistant:"))
     }
+
+    @Test
+    fun `task bundles are recognized by zip magic`() {
+        val task = java.io.File.createTempFile("model", ".task")
+        task.writeBytes(byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0x00))
+        val garbage = java.io.File.createTempFile("model", ".task")
+        garbage.writeBytes(byteArrayOf(0x47, 0x47, 0x55, 0x46))
+        val empty = java.io.File.createTempFile("model", ".task")
+        try {
+            assertTrue(LocalModelFormats.hasZipMagic(task))
+            assertFalse(LocalModelFormats.hasZipMagic(garbage))
+            assertFalse(LocalModelFormats.hasZipMagic(empty))
+        } finally {
+            task.delete()
+            garbage.delete()
+            empty.delete()
+        }
+    }
 }

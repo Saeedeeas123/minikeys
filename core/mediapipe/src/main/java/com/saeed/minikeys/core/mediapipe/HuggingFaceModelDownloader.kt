@@ -57,6 +57,11 @@ class HuggingFaceModelDownloader(private val modelsDir: File) {
                     out.flush()
                 }
             }
+            val received = partial.length()
+            if (total != null && received < total) {
+                partial.delete()
+                throw IOException("incomplete download: received $received of $total bytes — retry the download")
+            }
             if (target.exists()) target.delete()
             if (!partial.renameTo(target)) {
                 partial.delete()

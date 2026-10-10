@@ -17,17 +17,18 @@ class LlamaCppEngine(
 ) : LlmEngine, AutoCloseable {
 
     private val normalized = options.normalized()
-    private val handle: Long
+    @Volatile
+    private var handle: Long
     val nativeDescription: String
-
     init {
         handle = LlamaCppJni.loadModel(modelPath, normalized.context, normalized.threads)
         if (handle == 0L) throw IllegalStateException("llama.cpp returned a zero handle for $modelPath")
         nativeDescription = runCatching { LlamaCppJni.describe(handle) }
             .getOrDefault(File(modelPath).name)
     }
-
+    @Synchronized
     override fun chat(messages: List<ChatMessage>): LlmReply {
+        if (handle == 0L) throw IllegalStateException("engine is closed")
         if (messages.isEmpty()) throw IllegalArgumentException("at least one message is required")
         val roles = messages.map { it.role }.toTypedArray()
         val contents = messages.map { it.content }.toTypedArray()
@@ -51,7 +52,12 @@ class LlamaCppEngine(
         )
     }
 
+    @Synchronized
     override fun close() {
-        if (handle != 0L) LlamaCppJni.free(handle)
+        // Idempotent: a second close() must not double-free the native session.
+        if (handle != 0L) {
+            LlamaCppJni.free(handle)
+            handle = 0L
+        }
     }
 }

@@ -15,6 +15,22 @@ object LocalModelFormats {
         val lower = fileName.lowercase()
         return SUPPORTED_EXTENSIONS.any { lower.endsWith(it) }
     }
+
+    /** .task bundles are ZIP archives ("PK" magic). Other extensions are passed through unchecked. */
+    fun hasZipMagic(file: File): Boolean = try {
+        file.inputStream().use { stream ->
+            val magic = ByteArray(2)
+            var read = 0
+            while (read < 2) {
+                val n = stream.read(magic, read, 2 - read)
+                if (n < 0) break
+                read += n
+            }
+            read == 2 && magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()
+        }
+    } catch (e: Exception) {
+        false
+    }
 }
 
 /**
@@ -69,6 +85,11 @@ class LocalModelStore(context: Context) {
                 }
                 out.flush()
             }
+        }
+        val received = partial.length()
+        if (total != null && received < total) {
+            partial.delete()
+            throw IOException("incomplete file: received $received of $total bytes — retry picking the file")
         }
         if (target.exists()) target.delete()
         if (!partial.renameTo(target)) {

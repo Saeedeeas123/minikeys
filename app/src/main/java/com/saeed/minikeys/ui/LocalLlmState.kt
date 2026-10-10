@@ -106,32 +106,125 @@ class LocalLlmState(context: Context) {
 
     fun testLocal() {
         val path = selectedModelPath
-        if (path.isBlank() || !path.startsWith(store.modelsDir.absolutePath)) {
-            operationStatus = "Select or download a supported model first."
-            return
-        }
-        if (!LocalModelFormats.isSupported(File(path).name)) {
-            operationStatus = "Unsupported format: ${File(path).name} (expected .task / .litertlm / .bin)."
+        val problem = modelProblem(path)
+        if (problem != null) {
+            operationStatus = problem
             return
         }
         if (testing) return
         testing = true
-        operationStatus = "Loading model (this can take a few seconds)…"
+        operationStatus = "Loading model (this can take a few seconds)"
         Thread {
+            MiniKeysLog.line("MEDIAPIPE test start path=" + path + " size=" + File(path).length())
             val result = try {
-                val reply = LocalLlmRuntime.get(appContext, path)
-                    .chat(listOf(ChatMessage("user", "Reply to this message with exactly: OK")))
-                "LOCAL OK — ${reply.model} answered in ${reply.latencyMs} ms: " +
-                    "\"${reply.text.trim().take(120)}\""
-            } catch (e: Exception) {
+                MiniKeysLog.line("MEDIAPIPE loading model")
+                val engine = LocalLlmRuntime.get(appContext, path)
+                MiniKeysLog.line("MEDIAPIPE loaded, chatting")
+                val reply = engine.chat(listOf(ChatMessage("user", TEST_PROMPT)))
+                MiniKeysLog.line("MEDIAPIPE reply latencyMs=" + reply.latencyMs + " len=" + reply.text.length)
+                "LOCAL OK - " + reply.model + " answered in " + reply.latencyMs + " ms: " +
+                    (34).toChar() + reply.text.trim().take(120) + (34).toChar()
+            } catch (t: Throwable) {
+                MiniKeysLog.line("MEDIAPIPE FAILED " + t.javaClass.name + ": " + t.message)
                 LocalLlmRuntime.close()
-                "LOCAL FAILED — ${e.message ?: e.javaClass.simpleName}"
+                "LOCAL FAILED - " + t.javaClass.simpleName + ": " + (t.message ?: "no message") +
+                    " - tap Export log, the trace is saved."
             }
             operationStatus = result
             testing = false
         }.start()
     }
 
+    /**
+     * Acceptance test for repeated generation on the MediaPipe engine: [repeats] sequential
+     * generateResponse() calls on ONE loaded engine. Catches a runtime that degrades or stops
+     * answering after the first calls, and measures the per-call cost.
+     */
+    fun stressTest(repeats: Int = STRESS_REPEATS) {
+        val path = selectedModelPath
+        val problem = modelProblem(path)
+        if (problem != null) {
+            operationStatus = problem
+            return
+        }
+        if (testing) return
+        testing = true
+        operationStatus = "Stress test: loading the model"
+        Thread {
+            MiniKeysLog.line("MEDIAPIPE stress start path=$path repeats=$repeats")
+            var ok = 0
+            var empty = 0
+            var failed = 0
+            var firstError = ""
+            var totalMs = 0L
+            var slowestMs = 0L
+            var fastestMs = Long.MAX_VALUE
+            var lastText = ""
+            val result = try {
+                val engine = LocalLlmRuntime.get(appContext, path)
+                MiniKeysLog.line("MEDIAPIPE stress loaded")
+                for (i in 1..repeats) {
+                    try {
+                        val reply = engine.chat(listOf(ChatMessage("user", TEST_PROMPT)))
+                        totalMs += reply.latencyMs
+                        slowestMs = maxOf(slowestMs, reply.latencyMs)
+                        fastestMs = minOf(fastestMs, reply.latencyMs)
+                        lastText = reply.text.trim()
+                        if (lastText.isEmpty()) empty++ else ok++
+                        MiniKeysLog.line(
+                            "MEDIAPIPE stress $i/$repeats latencyMs=" + reply.latencyMs +
+                                " len=" + reply.text.length + " text=" + lastText.take(40)
+                        )
+                    } catch (t: Throwable) {
+                        failed++
+                        if (firstError.isEmpty()) {
+                            firstError = t.javaClass.simpleName + ": " + (t.message ?: "no message")
+                        }
+                        MiniKeysLog.line(
+                            "MEDIAPIPE stress $i/$repeats FAILED " + t.javaClass.name + ": " + t.message
+                        )
+                    }
+                    operationStatus = "Stress test $i/$repeats - ok=$ok empty=$empty failed=$failed"
+                }
+                val avg = if (repeats > 0) totalMs / repeats else 0L
+                val fastest = if (fastestMs == Long.MAX_VALUE) "n/a" else "$fastestMs ms"
+                val verdict = if (failed == 0 && empty == 0) "LOCAL STRESS PASS" else "LOCAL STRESS FAIL"
+                verdict + " - " + repeats + " calls on one loaded session: ok=" + ok +
+                    " empty=" + empty + " failed=" + failed + " | avg=" + avg + " ms, fastest=" +
+                    fastest + ", slowest=" + slowestMs + " ms | last reply: " +
+                    (34).toChar() + lastText.take(60) + (34).toChar() +
+                    (if (firstError.isEmpty()) "" else " | first error: " + firstError)
+            } catch (t: Throwable) {
+                MiniKeysLog.line("MEDIAPIPE stress setup FAILED " + t.javaClass.name + ": " + t.message)
+                LocalLlmRuntime.close()
+                "LOCAL STRESS FAIL - " + t.javaClass.simpleName + ": " + (t.message ?: "no message")
+            }
+            operationStatus = result
+            testing = false
+        }.start()
+    }
+
+    /** Shared validation so Test and the stress test reject the same bad inputs identically. */
+    private fun modelProblem(path: String): String? {
+        if (path.isBlank() || !path.startsWith(store.modelsDir.absolutePath)) {
+            return "Select or download a supported model first."
+        }
+        if (!LocalModelFormats.isSupported(File(path).name)) {
+            return "Unsupported format: " + File(path).name + " (expected .task / .litertlm / .bin)."
+        }
+        val modelFile = File(path)
+        if (!modelFile.isFile || modelFile.length() == 0L) {
+            return "Model file is empty or missing - re-import or re-download it."
+        }
+        if (modelFile.name.lowercase().endsWith(".task") && !LocalModelFormats.hasZipMagic(modelFile)) {
+            return "Not a .task bundle (bad header) - the file is corrupt; re-import or re-download it."
+        }
+        return null
+    }
+
+    fun exportLog() {
+        operationStatus = "Log exported: " + MiniKeysLog.flush(appContext, "mediapipe")
+    }
     fun unloadModel() {
         LocalLlmRuntime.close()
         if (operationStatus.startsWith("LOCAL OK")) {
@@ -160,6 +253,10 @@ class LocalLlmState(context: Context) {
         "No local model yet — pick one from device storage or download from Hugging Face."
 
     private companion object {
+        /** Exactly the same prompt for every call, so the stress loop is comparable. */
+        const val TEST_PROMPT = "Reply to this message with exactly: OK"
+        const val STRESS_REPEATS = 20
+
         /** A known LiteRT-community bundle; both fields stay fully editable. */
         const val DEFAULT_HF_REPO = "litert-community/gemma-3-1b-it"
         const val DEFAULT_HF_FILE = "gemma-3-1b-it.task"

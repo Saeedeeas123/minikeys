@@ -23,7 +23,8 @@ class MediapipeLlmEngine(
 ) : LlmEngine, AutoCloseable {
 
     private val llm: LlmInference
-
+    @Volatile
+    private var closed = false
     init {
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelPath)
@@ -31,11 +32,11 @@ class MediapipeLlmEngine(
             .build()
         llm = LlmInference.createFromOptions(context.applicationContext, options)
     }
-
     override fun chat(messages: List<ChatMessage>): LlmReply {
         val prompt = LocalPromptBuilder.toPrompt(messages)
         val startedAt = System.currentTimeMillis()
         synchronized(llm) {
+            check(!closed) { "engine is closed" }
             val text = llm.generateResponse(prompt)
             return LlmReply(
                 text = text,
@@ -44,9 +45,12 @@ class MediapipeLlmEngine(
             )
         }
     }
-
     override fun close() {
-        llm.close()
+        synchronized(llm) {
+            if (closed) return
+            closed = true
+            llm.close()
+        }
     }
 }
 

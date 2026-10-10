@@ -11,6 +11,23 @@ import java.io.IOException
 object LlamaModelFormats {
     const val EXTENSION = ".gguf"
     fun isSupported(fileName: String): Boolean = fileName.lowercase().endsWith(EXTENSION)
+
+    /** First 4 bytes of every GGUF file are the ASCII magic "GGUF". */
+    fun hasGgufMagic(file: File): Boolean = try {
+        file.inputStream().use { stream ->
+            val magic = ByteArray(4)
+            var read = 0
+            while (read < 4) {
+                val n = stream.read(magic, read, 4 - read)
+                if (n < 0) break
+                read += n
+            }
+            read == 4 && magic[0] == 0x47.toByte() && magic[1] == 0x47.toByte() &&
+                magic[2] == 0x55.toByte() && magic[3] == 0x46.toByte()
+        }
+    } catch (e: Exception) {
+        false
+    }
 }
 
 /**
@@ -59,6 +76,11 @@ class LlamaModelStore(context: Context) {
                 }
                 out.flush()
             }
+        }
+        val received = partial.length()
+        if (total != null && received < total) {
+            partial.delete()
+            throw IOException("incomplete file: received $received of $total bytes — retry picking the file")
         }
         if (target.exists()) target.delete()
         if (!partial.renameTo(target)) {

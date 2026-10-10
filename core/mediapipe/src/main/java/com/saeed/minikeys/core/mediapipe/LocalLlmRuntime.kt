@@ -15,11 +15,15 @@ object LocalLlmRuntime {
     val isLoaded: Boolean get() = engine != null
 
     fun get(context: android.content.Context, modelPath: String): MediapipeLlmEngine {
-        engine?.let { current ->
-            if (current.modelPath == modelPath) return current
-            runCatching { current.close() }
-        }
+        engine?.let { current -> if (current.modelPath == modelPath) return current }
         synchronized(this) {
+            // Re-check under the lock: two concurrent get() calls with different paths must
+            // not both load, and the old engine must not be closed while a chat() on it is
+            // still in flight (close+reload race -> native crash in the MediaPipe runtime).
+            engine?.let { current ->
+                if (current.modelPath == modelPath) return current
+                runCatching { current.close() }
+            }
             val fresh = MediapipeLlmEngine(context, modelPath)
             engine = fresh
             return fresh

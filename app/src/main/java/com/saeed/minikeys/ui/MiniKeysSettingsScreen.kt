@@ -313,9 +313,18 @@ private fun LocalModelCard(localState: LocalLlmState) {
                 onClick = { localState.testLocal() },
                 enabled = !localState.testing,
             ) {
-                Text(if (localState.testing) "Loading…" else "Test offline model")
+                Text(if (localState.testing) "Loading..." else "Test offline model")
             }
-            OutlinedButton(onClick = { localState.unloadModel() }) { Text("Unload from memory") }
+            OutlinedButton(onClick = { localState.stressTest() }, enabled = !localState.testing) {
+                Text("Run 20x")
+            }
+        }
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(onClick = { localState.unloadModel() }, enabled = !localState.testing) { Text("Unload from memory") }
+            OutlinedButton(onClick = { localState.exportLog() }) { Text("Export log") }
         }
 
         Text(
@@ -648,9 +657,18 @@ private fun LlamaGgufCard(llamaState: LlamaCppState) {
                 onClick = { llamaState.testModel() },
                 enabled = !llamaState.testing,
             ) {
-                Text(if (llamaState.testing) "Loading…" else "Test GGUF model")
+                Text(if (llamaState.testing) "Loading..." else "Test GGUF model")
             }
-            OutlinedButton(onClick = { llamaState.unloadModel() }) { Text("Unload from memory") }
+            OutlinedButton(onClick = { llamaState.stressTest() }, enabled = !llamaState.testing) {
+                Text("Run 20x")
+            }
+        }
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(onClick = { llamaState.unloadModel() }, enabled = !llamaState.testing) { Text("Unload from memory") }
+            OutlinedButton(onClick = { llamaState.exportLog() }) { Text("Export log") }
         }
 
         Text(

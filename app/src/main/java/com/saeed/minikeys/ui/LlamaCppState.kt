@@ -103,32 +103,126 @@ class LlamaCppState(context: Context) {
 
     fun testModel() {
         val path = selectedModelPath
-        if (path.isBlank() || !path.startsWith(store.modelsDir.absolutePath)) {
-            operationStatus = "Select or download a GGUF model first."
-            return
-        }
-        if (!LlamaModelFormats.isSupported(File(path).name)) {
-            operationStatus = "Unsupported format: " + File(path).name + " (expected .gguf)."
+        val problem = modelProblem(path)
+        if (problem != null) {
+            operationStatus = problem
             return
         }
         if (testing) return
         testing = true
-        operationStatus = "Loading model (this can take a few seconds)…"
+        operationStatus = "Loading model (this can take a few seconds)"
         Thread {
+            MiniKeysLog.line("LLAMA test start path=" + path + " size=" + File(path).length())
             val result = try {
-                val reply = LocalLlamaRuntime.get(path, TEST_OPTIONS)
-                    .chat(listOf(ChatMessage("user", "Reply to this message with exactly: OK")))
-                "LLAMA OK — " + reply.model + " answered in " + reply.latencyMs + " ms: " +
+                MiniKeysLog.line("LLAMA loading model")
+                val engine = LocalLlamaRuntime.get(path, TEST_OPTIONS)
+                MiniKeysLog.line("LLAMA loaded: " + engine.nativeDescription)
+                MiniKeysLog.line("LLAMA chatting")
+                val reply = engine.chat(listOf(ChatMessage("user", TEST_PROMPT)))
+                MiniKeysLog.line("LLAMA reply latencyMs=" + reply.latencyMs + " len=" + reply.text.length)
+                "LLAMA OK - " + reply.model + " answered in " + reply.latencyMs + " ms: " +
                     (34).toChar() + reply.text.trim().take(120) + (34).toChar()
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
+                MiniKeysLog.line("LLAMA FAILED " + t.javaClass.name + ": " + t.message)
                 LocalLlamaRuntime.close()
-                "LLAMA FAILED — " + (e.message ?: e.javaClass.simpleName)
+                "LLAMA FAILED - " + t.javaClass.simpleName + ": " + (t.message ?: "no message") +
+                    " - tap Export log, the trace is saved."
             }
             operationStatus = result
             testing = false
         }.start()
     }
 
+    /**
+     * Acceptance test for the "works, then suddenly stops" failure mode: [repeats] sequential
+     * chat() calls on ONE loaded engine (no reload in between). A session whose KV cache is not
+     * reset between calls dies part-way through this loop; this reports exactly how far it got.
+     */
+    fun stressTest(repeats: Int = STRESS_REPEATS) {
+        val path = selectedModelPath
+        val problem = modelProblem(path)
+        if (problem != null) {
+            operationStatus = problem
+            return
+        }
+        if (testing) return
+        testing = true
+        operationStatus = "Stress test: loading the model"
+        Thread {
+            MiniKeysLog.line("LLAMA stress start path=$path repeats=$repeats")
+            var ok = 0
+            var empty = 0
+            var failed = 0
+            var firstError = ""
+            var totalMs = 0L
+            var slowestMs = 0L
+            var fastestMs = Long.MAX_VALUE
+            var lastText = ""
+            val result = try {
+                val engine = LocalLlamaRuntime.get(path, TEST_OPTIONS)
+                MiniKeysLog.line("LLAMA stress loaded: " + engine.nativeDescription)
+                for (i in 1..repeats) {
+                    try {
+                        val reply = engine.chat(listOf(ChatMessage("user", TEST_PROMPT)))
+                        totalMs += reply.latencyMs
+                        slowestMs = maxOf(slowestMs, reply.latencyMs)
+                        fastestMs = minOf(fastestMs, reply.latencyMs)
+                        lastText = reply.text.trim()
+                        if (lastText.isEmpty()) empty++ else ok++
+                        MiniKeysLog.line(
+                            "LLAMA stress $i/$repeats latencyMs=" + reply.latencyMs +
+                                " len=" + reply.text.length + " text=" + lastText.take(40)
+                        )
+                    } catch (t: Throwable) {
+                        failed++
+                        if (firstError.isEmpty()) {
+                            firstError = t.javaClass.simpleName + ": " + (t.message ?: "no message")
+                        }
+                        MiniKeysLog.line(
+                            "LLAMA stress $i/$repeats FAILED " + t.javaClass.name + ": " + t.message
+                        )
+                    }
+                    operationStatus = "Stress test $i/$repeats - ok=$ok empty=$empty failed=$failed"
+                }
+                val avg = if (repeats > 0) totalMs / repeats else 0L
+                val fastest = if (fastestMs == Long.MAX_VALUE) "n/a" else "$fastestMs ms"
+                val verdict = if (failed == 0 && empty == 0) "LLAMA STRESS PASS" else "LLAMA STRESS FAIL"
+                verdict + " - " + repeats + " calls on one loaded session: ok=" + ok +
+                    " empty=" + empty + " failed=" + failed + " | avg=" + avg + " ms, fastest=" +
+                    fastest + ", slowest=" + slowestMs + " ms | last reply: " +
+                    (34).toChar() + lastText.take(60) + (34).toChar() +
+                    (if (firstError.isEmpty()) "" else " | first error: " + firstError)
+            } catch (t: Throwable) {
+                MiniKeysLog.line("LLAMA stress setup FAILED " + t.javaClass.name + ": " + t.message)
+                LocalLlamaRuntime.close()
+                "LLAMA STRESS FAIL - " + t.javaClass.simpleName + ": " + (t.message ?: "no message")
+            }
+            operationStatus = result
+            testing = false
+        }.start()
+    }
+
+    /** Shared validation so Test and the stress test reject the same bad inputs identically. */
+    private fun modelProblem(path: String): String? {
+        if (path.isBlank() || !path.startsWith(store.modelsDir.absolutePath)) {
+            return "Select or download a GGUF model first."
+        }
+        if (!LlamaModelFormats.isSupported(File(path).name)) {
+            return "Unsupported format: " + File(path).name + " (expected .gguf)."
+        }
+        val modelFile = File(path)
+        if (!modelFile.isFile || modelFile.length() == 0L) {
+            return "Model file is empty or missing - re-import or re-download it."
+        }
+        if (!LlamaModelFormats.hasGgufMagic(modelFile)) {
+            return "Not a GGUF file (bad header) - the file is corrupt; re-import or re-download it."
+        }
+        return null
+    }
+
+    fun exportLog() {
+        operationStatus = "Log exported: " + MiniKeysLog.flush(appContext, "llama")
+    }
     fun unloadModel() {
         LocalLlamaRuntime.close()
         if (operationStatus.startsWith("LLAMA OK")) {
@@ -159,6 +253,10 @@ class LlamaCppState(context: Context) {
     private companion object {
         /** Greedy decoding: the acceptance test must be deterministic. */
         val TEST_OPTIONS = LlamaCppOptions(maxTokens = 64, temp = 0.0f)
+
+        /** Exactly the same prompt for every call, so the stress loop is comparable. */
+        const val TEST_PROMPT = "Reply to this message with exactly: OK"
+        const val STRESS_REPEATS = 20
 
         /** Editable example defaults; a public GGUF mirror of the 270M model. */
         const val DEFAULT_HF_REPO = "unsloth/gemma-3-270m-it-GGUF"
