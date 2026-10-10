@@ -219,6 +219,9 @@ class LocalLlmState(context: Context) {
         if (modelFile.name.lowercase().endsWith(".task") && !LocalModelFormats.hasZipMagic(modelFile)) {
             return "Not a .task bundle (bad header) - the file is corrupt; re-import or re-download it."
         }
+        if (modelFile.name.lowercase().endsWith(".litertlm") && !LocalModelFormats.hasLitertlmMagic(modelFile)) {
+            return "Not a .litertlm bundle (bad header) - the file is corrupt; re-import or re-download it."
+        }
         return null
     }
 

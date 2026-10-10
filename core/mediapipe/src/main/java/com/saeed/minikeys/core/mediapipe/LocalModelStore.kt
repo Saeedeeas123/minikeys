@@ -16,21 +16,53 @@ object LocalModelFormats {
         return SUPPORTED_EXTENSIONS.any { lower.endsWith(it) }
     }
 
-    /** .task bundles are ZIP archives ("PK" magic). Other extensions are passed through unchecked. */
-    fun hasZipMagic(file: File): Boolean = try {
+    /**
+     * `.task` bundles are ZIP archives, but a real bundle carries a few leading bytes before the ZIP
+     * local-file header: verified on device 2026-10-10 against gesture_recognizer.task (header at
+     * offset 2) and a litert-community LLM bundle (offset 4). Demanding "PK" at byte 0 rejected every
+     * real bundle, so the signature is searched inside a small window instead.
+     */
+    fun hasZipMagic(file: File): Boolean = containsMagic(file, ZIP_LOCAL_HEADER)
+
+    /** `.litertlm` bundles start with the ASCII magic "LITERTLM" (verified against a real file). */
+    fun hasLitertlmMagic(file: File): Boolean = containsMagic(file, LITERTLM_MAGIC)
+
+    private fun containsMagic(file: File, magic: ByteArray): Boolean = try {
         file.inputStream().use { stream ->
-            val magic = ByteArray(2)
+            val window = ByteArray(MAGIC_WINDOW_BYTES)
             var read = 0
-            while (read < 2) {
-                val n = stream.read(magic, read, 2 - read)
+            while (read < window.size) {
+                val n = stream.read(window, read, window.size - read)
                 if (n < 0) break
                 read += n
             }
-            read == 2 && magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()
+            var at = 0
+            var found = false
+            while (at + magic.size <= read) {
+                var matches = true
+                for (k in magic.indices) {
+                    if (window[at + k] != magic[k]) {
+                        matches = false
+                        break
+                    }
+                }
+                if (matches) {
+                    found = true
+                    break
+                }
+                at++
+            }
+            found
         }
     } catch (e: Exception) {
         false
     }
+
+    private val ZIP_LOCAL_HEADER = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+    private val LITERTLM_MAGIC = "LITERTLM".toByteArray(Charsets.US_ASCII)
+
+    /** How far into the file a bundle's magic may sit (real bundles use 0, 2 or 4). */
+    private const val MAGIC_WINDOW_BYTES = 16
 }
 
 /**
