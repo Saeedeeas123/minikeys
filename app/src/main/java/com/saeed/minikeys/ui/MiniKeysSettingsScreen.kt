@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.saeed.minikeys.BuildConfig
 import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
 import com.saeed.minikeys.core.llm.LlmProviderPreset
@@ -79,8 +80,9 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "Keyboard module v0.1.0 — every change below is saved and applied to the keyboard " +
-                "immediately, no restart needed.",
+            text = "MiniKeys v" + BuildConfig.VERSION_NAME + " (build " + BuildConfig.VERSION_CODE +
+                ") — every change below is saved and applied to the keyboard immediately, " +
+                "no restart needed.",
             style = MaterialTheme.typography.bodyMedium,
         )
 
