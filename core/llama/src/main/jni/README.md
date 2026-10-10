@@ -21,6 +21,27 @@ shipped artifact from this file — otherwise the module cannot be reused, audit
 `build_jni.sh` holds the exact command lines (edit the five path variables at the top).
 `android.cmake` is the CMake toolchain file used to produce the static archives.
 
+## The failure that mattered (found 2026-10-10): a prompt without the assistant turn
+
+`format_prompt()` called `llama_chat_apply_template(..., add_ass = false, ...)`. With `false` the
+rendered prompt stops at the user's `<end_of_turn>` and never opens the model's own turn, so greedy
+decoding answers with `<end_of_turn>` itself — an end-of-generation token — and `chat()` produced
+**zero tokens**. On the device this surfaced as
+`RuntimeException: generation produced no tokens (decode failed or context exhausted)` on the *first*
+call, for every call.
+
+Reproduced and fixed with `chat_probe` (Linux, same GGUF, mirroring `chat()` exactly):
+
+| variant | rendered prompt ends with | first sampled token | result |
+|---|---|---|---|
+| `add_ass = false` (was shipped) | `...OK<end_of_turn>\n` | `106` = `<end_of_turn>` (EOG) | 0 tokens → the app's error |
+| `add_ass = true` (now shipped) | `...OK<end_of_turn>\n<start_of_turn>model\n` | `7676` = `OK` | `OK\n` |
+| hand-rolled gemma fallback | same as above | `7676` = `OK` | `OK\n` |
+
+Lesson for every template-based engine: a chat call must end the prompt *inside the assistant turn*.
+If generation ever returns empty again, the exception now reports the first sampled token id and
+whether it was an EOG, which identifies this class of bug immediately.
+
 ## Native semantics — do not "simplify" without re-testing
 
 1. **`chat()` clears the KV cache before every request**

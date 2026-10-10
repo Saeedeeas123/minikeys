@@ -139,7 +139,13 @@ std::string format_prompt(const Session *s, const std::vector<llama_chat_message
         for (const auto &m : msgs) want += (int64_t) strlen(m.content) + (int64_t) strlen(m.role) + 8;
         for (int attempt = 0; attempt < 3; attempt++) {
             std::vector<char> buf((size_t) (want * 2 + 4096));
-            int32_t len = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), false,
+            // add_ass = true: the rendered prompt must END with the model's assistant turn
+            // ("<start_of_turn>model\n" for Gemma). With false the prompt stopped at the user's
+            // <end_of_turn>, so greedy decoding answered with <end_of_turn> itself (an EOG token)
+            // and chat() returned zero tokens. Reproduced on 2026-10-10 against the same GGUF with
+            // a Linux probe mirroring this function: false -> 0 tokens (first id 106 = EOG),
+            // true -> "OK".
+            int32_t len = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), true,
                                                    buf.data(), (int32_t) buf.size());
             if (len >= 0 && (uint32_t) len < buf.size()) return std::string(buf.data());
             if (len < 0) break;
@@ -316,8 +322,14 @@ JC(chat)(JNIEnv *env, jobject, jlong h, jobjectArray jroles, jobjectArray jconte
     }
     std::vector<llama_token> out;
     out.reserve((size_t) maxTokens);
+    llama_token first_tok = LLAMA_TOKEN_NULL;
+    bool first_is_eog = false;
     for (int i = 0; i < maxTokens; i++) {
         llama_token tok = llama_sampler_sample(chain, s->ctx, -1);
+        if (i == 0) {
+            first_tok = tok;
+            first_is_eog = (tok >= 0) && llama_vocab_is_eog(s->vocab, tok);
+        }
         if (tok < 0 || (uint32_t) tok > (uint32_t) n_vocab + 128) break; // LLAMA_TOKEN_NULL guard
         if (llama_vocab_is_eog(s->vocab, tok)) break;
         out.push_back(tok);
@@ -330,9 +342,16 @@ JC(chat)(JNIEnv *env, jobject, jlong h, jobjectArray jroles, jobjectArray jconte
     }
     llama_sampler_free(chain);
     if (out.empty()) {
-        // Surface the failure instead of returning an empty reply that looks like a model
-        // that 'suddenly stopped'.
-        throw_java(env, "generation produced no tokens (decode failed or context exhausted)");
+        // Surface the failure instead of returning an empty reply that looks like a model that
+        // 'suddenly stopped'. The first sampled token makes the cause readable from the app log:
+        // an EOG as the very first token means the prompt did not open the assistant turn.
+        std::string why = "generation produced no tokens (first sampled token id=" +
+            std::to_string((int) first_tok) + ", eog=" + (first_is_eog ? "yes" : "no") + ")";
+        if (first_is_eog) {
+            why += " - the model ended its turn immediately, so the prompt most likely stopped at "
+                   "the user turn instead of opening the assistant turn";
+        }
+        throw_java(env, why);
         return nullptr;
     }
     return to_java(env, detokenize_range(s, out));
