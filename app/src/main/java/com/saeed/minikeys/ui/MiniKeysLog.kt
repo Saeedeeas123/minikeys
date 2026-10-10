@@ -12,9 +12,15 @@ import java.util.Locale
 
 /**
  * Trace + crash exporter that survives the process.
- * Writes into shared Downloads THROUGH MediaStore (no storage permission needed on API 29+).
- * Files appear as MiniKeys-*.log|txt inside /sdcard/Download — readable by any file manager
- * and by the coding agent directly. App-private logging is a proven dead end on this device.
+ *
+ * Lines go to logcat and into an in-memory queue; the queue is written to a file in shared Downloads
+ * either on demand ([flush], used by the "Export log" buttons) or by the crash handler
+ * ([writeCrash]). Nothing is written to storage unless one of those runs, so a normal app start does
+ * not leave a log file behind.
+ *
+ * Files appear as MiniKeys-*.log.txt / MiniKeys-crash-*.txt inside /sdcard/Download, readable by any
+ * file manager and by the coding agent directly. App-private logging is a proven dead end on this
+ * device.
  */
 object MiniKeysLog {
 
@@ -54,7 +60,7 @@ object MiniKeysLog {
     /** Flush the accumulated trace into a timestamped file in shared Downloads. */
     @Synchronized
     fun flush(context: Context, name: String): String {
-        val fileName = "MiniKeys-$name-${stamp()}.log"
+        val fileName = "MiniKeys-$name-${stamp()}.log.txt"
         return try {
             val values = newValues(fileName)
             val uri: Uri? = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
