@@ -13,9 +13,11 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import com.saeed.minikeys.core.settings.KeyboardTheme
+import com.saeed.minikeys.core.settings.MiniKeysLog
 import com.saeed.minikeys.core.settings.OverlaySettings
 import com.saeed.minikeys.keyboard.KeyAction
 import com.saeed.minikeys.keyboard.KeyDef
+import com.saeed.minikeys.keyboard.KeyDispatcher
 import com.saeed.minikeys.keyboard.KeyboardLayouts
 import com.saeed.minikeys.keyboard.KeyboardPage
 import kotlin.math.abs
@@ -23,19 +25,26 @@ import kotlin.math.abs
 /**
  * ONE vertical key strip of the edge overlay (left or right).
  *
- * This view lives in its own overlay window that is exactly as wide as the strip, so it never covers
- * the middle of the screen: the middle stays fully interactive for the app underneath.
+ * The window is exactly as wide as the strip, so the middle of the screen is never covered and stays
+ * fully interactive for the app underneath.
  *
- * Keys are visual for now — a press reports through [onKeyPressed] (haptic + highlight), which is
- * the seam where per-app shortcut actions will plug in later.
+ * The keyboard is laid out the way it was asked for: the whole page is ONE sequence and the two
+ * edges deal it out alternately — first key top-left, second key top-right, third key left again …
+ * so the pair of strips together reproduce the horizontal keyboard vertically. Pressing a page key
+ * (numbers/symbols, emoji, shortcuts) or caps rewrites the strips from the very top-left.
  */
 class EdgeColumnView(context: Context) : View(context) {
 
     /** Which edge this strip is attached to; only affects the rounded corner side. */
     var side: Side = Side.LEFT
 
-    /** Pressed-key callback: the future per-app shortcut dispatcher. */
-    var onKeyPressed: ((KeyDef) -> Unit)? = null
+    /**
+     * Page and caps are shared by both strips, so a strip never changes them itself — it asks the
+     * service, which then pushes the new state into both views. Otherwise the two halves would drift
+     * apart on the first page change.
+     */
+    var onPageRequest: ((KeyboardPage) -> Unit)? = null
+    var onCapsRequest: (() -> Unit)? = null
 
     enum class Side { LEFT, RIGHT }
 
@@ -44,6 +53,7 @@ class EdgeColumnView(context: Context) : View(context) {
     private var settings: OverlaySettings = OverlaySettings.DEFAULT
     private var theme: KeyboardTheme = KeyboardTheme.DEFAULT
     private var page: KeyboardPage = KeyboardPage.LETTERS
+    private var caps: Boolean = false
     private var scroll = 0f
     private var contentHeight = 0f
     private var placed: List<PlacedKey> = emptyList()
@@ -86,6 +96,20 @@ class EdgeColumnView(context: Context) : View(context) {
         invalidate()
     }
 
+    /**
+     * New shared state from the service. A page or caps change always rewinds the strip to its first
+     * key, which is what makes the switch start from the top-left of the screen.
+     */
+    fun setState(page: KeyboardPage, caps: Boolean) {
+        if (this.page == page && this.caps == caps) return
+        val pageChanged = this.page != page
+        this.page = page
+        this.caps = caps
+        if (pageChanged) scroll = 0f
+        rebuild()
+        invalidate()
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         setOnApplyWindowInsetsListener { _, insets ->
@@ -123,22 +147,14 @@ class EdgeColumnView(context: Context) : View(context) {
         rebuild()
     }
 
-    /** Keys of the strip: the letters page split across the two strips, plus the control keys. */
+    /**
+     * This strip's half of the page: the page is one flat sequence and this strip takes every other
+     * key — left takes the even positions (0, 2, 4 …), right the odd ones (1, 3, 5 …).
+     */
     private fun keysForStrip(): List<KeyDef> {
-        val flat = KeyboardLayouts.rowsFor(page).flatten()
-        val half = (flat.size + 1) / 2
-        val mine = if (side == Side.LEFT) flat.take(half) else flat.drop(half)
-        return buildList {
-            if (side == Side.LEFT) {
-                add(KeyDef(KeyAction.ShowSymbols, "?123"))
-                addAll(mine)
-                add(KeyDef(KeyAction.Text(" ", letter = false), "space"))
-            } else {
-                addAll(mine)
-                add(KeyDef(KeyAction.Backspace, "del"))
-                add(KeyDef(KeyAction.Enter, "enter"))
-            }
-        }
+        val sequence = KeyboardLayouts.verticalKeys(page, caps)
+        val firstIndex = if (side == Side.LEFT) 0 else 1
+        return sequence.filterIndexed { index, _ -> index % 2 == firstIndex }
     }
 
     private fun keyHeightPx(): Float = (settings.keyHeightDp * density).coerceAtLeast(dp(24f))
@@ -165,12 +181,13 @@ class EdgeColumnView(context: Context) : View(context) {
 
     private fun labelOf(key: KeyDef): String = when (val action = key.action) {
         is KeyAction.Text -> key.label
-        KeyAction.Shift -> "shift"
-        KeyAction.Backspace -> "del"
-        KeyAction.Enter -> "enter"
-        KeyAction.ShowSymbols -> "?123"
-        KeyAction.ShowLetters -> "ABC"
+        KeyAction.CapsToggle -> if (caps) "⇪" else "⇧"
+        else -> key.label
     }
+
+    /** The caps key stays highlighted while caps lock is on, like a real keyboard's LED. */
+    private fun isActive(key: KeyDef): Boolean =
+        key.action == KeyAction.CapsToggle && caps
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -183,9 +200,13 @@ class EdgeColumnView(context: Context) : View(context) {
 
             val rect = RectF(item.rect.left, top, item.rect.right, bottom)
             val pressed = item.key === pressedKey
-            keyPaint.color = if (pressed) theme.keyBackgroundPressed else theme.keyBackground
+            keyPaint.color = when {
+                pressed -> theme.keyBackgroundPressed
+                item.key.special -> theme.specialKeyBackground
+                else -> theme.keyBackground
+            }
             canvas.drawRoundRect(rect, cornerRadius, cornerRadius, keyPaint)
-            drawLabel(canvas, item.label, rect, if (pressed) theme.accent else theme.keyText)
+            drawLabel(canvas, item.label, rect, if (pressed || isActive(item.key)) theme.accent else theme.keyText)
         }
         drawScrollHints(canvas)
     }
@@ -246,11 +267,7 @@ class EdgeColumnView(context: Context) : View(context) {
                 invalidate()
                 if (key != null) {
                     performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    when (key.action) {
-                        KeyAction.ShowSymbols -> showPage(KeyboardPage.SYMBOLS)
-                        KeyAction.ShowLetters -> showPage(KeyboardPage.LETTERS)
-                        else -> onKeyPressed?.invoke(key)
-                    }
+                    activate(key)
                 }
                 return true
             }
@@ -264,12 +281,19 @@ class EdgeColumnView(context: Context) : View(context) {
         return super.onTouchEvent(event)
     }
 
-    private fun showPage(page: KeyboardPage) {
-        if (this.page == page) return
-        this.page = page
-        scroll = 0f
-        rebuild()
-        invalidate()
+    /** What a press does: page and caps keys change the strips, everything else goes to the editor. */
+    private fun activate(key: KeyDef) {
+        when (val action = key.action) {
+            KeyAction.CapsToggle -> onCapsRequest?.invoke()
+            KeyAction.ShowSymbols -> onPageRequest?.invoke(KeyboardPage.SYMBOLS)
+            KeyAction.ShowLetters -> onPageRequest?.invoke(KeyboardPage.LETTERS)
+            KeyAction.ShowEmoji -> onPageRequest?.invoke(KeyboardPage.EMOJI)
+            KeyAction.ShowShortcuts -> onPageRequest?.invoke(KeyboardPage.SHORTCUTS)
+            else -> {
+                val result = KeyDispatcher.dispatch(action)
+                MiniKeysLog.line("EDGE " + side + " '" + key.label + "' -> " + result)
+            }
+        }
     }
 
     private fun updatePressed(y: Float) {

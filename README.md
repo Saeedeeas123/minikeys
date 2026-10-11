@@ -115,7 +115,59 @@ APK, and documented with a step-by-step recipe — so consuming it in an app nev
 - Not implemented in v0.1 on purpose: suggestions/dictionary, gesture typing, clipboard, per-app
   themes, multi-language subtypes beyond the en_US subtype declared in `method.xml`.
 
+## Edge overlay — the always-on keys (v0.8.0)
+
+The edge strips are no longer a picture: **every key press is dispatched to the focused app.**
+
+```
+:edgeoverlay  two TYPE_APPLICATION_OVERLAY strips (one per edge)  ── key press ──┐
+              + foreground service + ON/OFF notification                          │
+                                                                                  ▼
+:keyboard     KeyboardService (IME)  ── owns the InputConnection ───────►  KeyDispatcher
+              shows a 1px invisible input view while the strips are ON   commitText /
+                                                                         sendKeyEvent
+```
+
+How it works, in three rules:
+
+1. **The strips are the keyboard while they are ON.** `MiniKeysRuntime.overlayAttached` is the single
+   source of truth: when it is true the IME answers with a 1px invisible input view, so no second
+   keyboard slides up under the strips. When it is false the IME shows its normal keyboard again.
+   One pixel, not zero: a zero-height input view can make the framework end the input session and take
+   the `InputConnection` with it, which would leave the strips unable to type.
+2. **Typing goes through the IME's connection.** An overlay window can never type into another app;
+   an IME can never leave the middle of the screen interactive. Together they cover both halves:
+   characters are `commitText`, everything else (arrows, Tab, Esc, Enter, Ctrl+A …) is a real
+   `KeyEvent` with its modifier state, so the focused app's own key handling decides — if the app
+   implements the combination it works, if it does not, nothing happens, exactly like a keyboard
+   plugged into the USB port.
+3. **The ON/OFF switch lives in the notification.** The service therefore stays alive while the strips
+   are OFF — a notification that vanished when switched off could never switch it back on. The
+   persisted `enabled` flag, not the service lifetime, decides whether the strips are drawn.
+   The notification also reports live typing readiness, including "MiniKeys must be the keyboard"
+   when another IME is selected.
+
+**Requirement:** the strips can only type while **MiniKeys is the selected keyboard** (it is the
+component that owns the text-field connection). Without it the keys are inert by design.
+
+### Vertical layout (the two strips are one keyboard, split)
+
+The page is ONE sequence dealt out alternately: key 1 top-left, key 2 top-right, key 3 left … so the
+pair of strips reproduces a horizontal keyboard vertically.
+
+| Page | Content (interleaved left/right) |
+|---|---|
+| letters | q·w·e·r·t·y… (left takes q, e, t, u, o, a, d, g, j, z, x, c, b, m) |
+| numbers/symbols (`?123`) | 1·2·3·4… then symbols |
+| emoji (`☺`) | emoji, in the same order |
+| shortcuts (`⌃`) | the common Windows combinations, sent as real key events with modifier state |
+
+Function keys follow the content on every page, also interleaved: space, backspace, delete, enter,
+tab, esc, arrows, home, end, caps (`⇪`), page keys. Any page or caps press rewrites both strips from
+the very top-left.
+
 ## Keyboard modes (v0.6.0)
+
 Two geometries, switchable in Settings → **Keyboard mode** and persisted with the rest of the settings:
 - **Normal** — the classic bottom strip (`MiniKeyboardView`).
 - **Vertical** — `EdgeKeyboardView`: two independent, scrollable key columns hugging the left and

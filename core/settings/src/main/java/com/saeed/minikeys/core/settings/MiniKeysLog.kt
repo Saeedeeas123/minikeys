@@ -3,9 +3,11 @@ package com.saeed.minikeys.core.settings
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -13,25 +15,82 @@ import java.util.Locale
 /**
  * Trace + crash exporter that survives the process.
  *
- * Lines go to logcat and into an in-memory queue; the queue is written to a file in shared Downloads
- * either on demand ([flush], used by the "Export log" buttons) or by the crash handler
- * ([writeCrash]). Nothing is written to storage unless one of those runs, so a normal app start does
- * not leave a log file behind.
+ * Two sinks, on purpose:
  *
- * Files appear as MiniKeys-*.log.txt / MiniKeys-crash-*.txt inside /sdcard/Download, readable by any
- * file manager and by the coding agent directly. App-private logging is a proven dead end on this
- * device.
+ *  1. a DURABLE per-run file under the app's external files dir
+ *     (`/sdcard/Android/data/com.saeed.minikeys/files/logs/`), appended and flushed on EVERY line, so
+ *     a process that dies mid-action still leaves everything up to that instant on disk. This is the
+ *     only diagnostic channel on this device: logcat, tombstones and dropbox are unreachable.
+ *  2. an in-memory queue that the "Export log" buttons and the crash handler copy into shared
+ *     Downloads (MediaStore) — the copy a human can pick up without a PC.
+ *
+ * One file per run, previous runs retained (see [KEEP_RUNS]); nothing is overwritten on exit.
  */
 object MiniKeysLog {
 
     private const val TAG = "minikeys"
+    private const val KEEP_RUNS = 10
+
     private val queue = StringBuilder()
+
+    @Volatile
+    private var runFile: File? = null
+
+    /**
+     * Opens this run's log file. Called from Application.onCreate and from every service, so whichever
+     * component starts first creates it; later calls are no-ops.
+     */
+    @Synchronized
+    fun attach(context: Context) {
+        if (runFile != null) return
+        try {
+            val root = context.getExternalFilesDir(null) ?: context.filesDir
+            val dir = File(root, "logs")
+            if (!dir.exists() && !dir.mkdirs()) throw IllegalStateException("cannot create " + dir)
+            val target = File(dir, "minikeys-" + stamp() + ".log")
+            target.createNewFile()
+            runFile = target
+            prune(dir)
+            line("=== log opened: " + target.absolutePath + " ===")
+            line(
+                "device=" + Build.MANUFACTURER + " " + Build.MODEL +
+                    " android=" + Build.VERSION.RELEASE + " (sdk " + Build.VERSION.SDK_INT + ")" +
+                    " abi=" + Build.SUPPORTED_ABIS.firstOrNull(),
+            )
+        } catch (t: Throwable) {
+            runFile = null
+            line("LOG FILE UNAVAILABLE (" + t.javaClass.simpleName + ": " + t.message + ") — trace is memory-only")
+        }
+    }
+
+    /** Absolute path of this run's file, or null when the file could not be opened. */
+    fun runLogPath(): String? = runFile?.absolutePath
+
+    /** Previous runs, newest first. Basis of the in-app log viewer. */
+    fun sessions(context: Context): List<File> {
+        val root = context.getExternalFilesDir(null) ?: context.filesDir
+        val dir = File(root, "logs")
+        return dir.listFiles { file -> file.isFile && file.name.endsWith(".log") }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
+    }
+
+    private fun prune(dir: File) {
+        val files = dir.listFiles { file ->
+            file.isFile && file.name.startsWith("minikeys-") && file.name.endsWith(".log")
+        }?.sortedByDescending { it.lastModified() } ?: return
+        files.drop(KEEP_RUNS).forEach { runCatching { it.delete() } }
+    }
 
     @Synchronized
     fun line(msg: String) {
         val ts = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
         Log.i(TAG, msg)
-        queue.append(ts).append(' ').append(msg).append('\n')
+        val entry = ts + " " + msg + "\n"
+        queue.append(entry)
+        val file = runFile ?: return
+        // appendText opens + closes the stream, which flushes: a crash right after this line keeps it.
+        runCatching { file.appendText(entry, Charsets.UTF_8) }
     }
 
     @Synchronized

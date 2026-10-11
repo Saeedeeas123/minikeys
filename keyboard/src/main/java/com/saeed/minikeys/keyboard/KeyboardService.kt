@@ -4,17 +4,23 @@ import android.content.SharedPreferences
 import android.inputmethodservice.InputMethodService
 import android.text.InputType
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import com.saeed.minikeys.core.settings.KeyboardSettingsStore
+import com.saeed.minikeys.core.settings.MiniKeysLog
+import com.saeed.minikeys.core.settings.MiniKeysRuntime
 
 /**
- * The IME itself — the plain, normal keyboard, nothing else.
+ * The IME. It has two faces, decided by whether the always-on edge overlay is attached:
  *
- * The vertical / edge geometry deliberately does NOT live here any more: an IME cannot leave the
- * middle of the screen interactive, so that idea moved to the always-on edge overlay app surface
- * (`:edgeoverlay`). This service builds one [MiniKeyboardView], keeps it in sync with the persisted
- * settings (including changes made while the keyboard is on screen) and applies the resulting text
- * edits to the editor through the input connection.
+ *  - overlay OFF → the normal bottom keyboard ([MiniKeyboardView]) appears exactly as before.
+ *  - overlay ON  → the strips on the screen edges ARE the keyboard, so this service renders an
+ *    EMPTY, zero-height input view: no second keyboard slides up under the strips. The service stays
+ *    bound to the focused field all the same, because it owns the `InputConnection` that the strips
+ *    type through ([KeyDispatcher]).
+ *
+ * That split is the whole trick: an overlay window can never type into another app, and an IME can
+ * never leave the middle of the screen interactive — together they cover both halves.
  */
 class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
 
@@ -26,35 +32,55 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
         applySavedSettings()
     }
 
+    /** The edge overlay appeared or disappeared → swap between the silent and the visible face. */
+    private val runtimeListener: () -> Unit = { refreshInputView() }
+
     override fun onCreate() {
         super.onCreate()
+        MiniKeysLog.attach(this)
         store = KeyboardSettingsStore.from(this)
         store.addListener(settingsListener)
+        MiniKeysRuntime.addListener(runtimeListener)
+        MiniKeysLog.line("IME: service created (overlay attached=" + MiniKeysRuntime.overlayAttached + ")")
     }
 
     override fun onCreateInputView(): View {
-        val view = MiniKeyboardView(this).also { it.listener = this }
-        keyboardView = view
+        val view = buildInputView()
+        keyboardView = view as? MiniKeyboardView
         applySavedSettings()
         return view
+    }
+
+    override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(info, restarting)
+        KeyDispatcher.attach(currentInputConnection)
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         keyboardView?.setEnterLabel(enterLabelFor(info))
         applySavedSettings()
+        KeyDispatcher.attach(currentInputConnection)
+    }
+
+    override fun onFinishInput() {
+        KeyDispatcher.attach(null)
+        super.onFinishInput()
     }
 
     override fun onDestroy() {
-        store.removeListener(settingsListener)
+        KeyDispatcher.attach(null)
+        MiniKeysRuntime.removeListener(runtimeListener)
+        runCatching { store.removeListener(settingsListener) }
         keyboardView = null
+        MiniKeysLog.line("IME: service destroyed")
         super.onDestroy()
     }
 
     /** Never take over the whole screen; the app stays visible behind the keyboard. */
     override fun onEvaluateFullscreenMode(): Boolean = false
 
-    // --- MiniKeyboardView.Listener -------------------------------------------------------------
+    // --- MiniKeyboardView.Listener (the horizontal keyboard only) --------------------------------
 
     override fun onText(text: String) {
         currentInputConnection?.commitText(text, 1)
@@ -80,6 +106,31 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     }
 
     // --- internals ----------------------------------------------------------------------------
+
+    /**
+     * The empty face: a view ONE pixel tall. Not zero: a zero-height input view can make the framework
+     * treat the IME as not shown and end the input session, which would take the `InputConnection` away
+     * and the strips would stop typing. The IME window background is transparent, so one pixel of it is
+     * invisible on screen while the session stays alive and the strips can type through it.
+     */
+    private fun buildInputView(): View = if (MiniKeysRuntime.overlayAttached) {
+        View(this).apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1)
+        }
+    } else {
+        MiniKeyboardView(this).also { it.listener = this }
+    }
+
+    private fun refreshInputView() {
+        val view = buildInputView()
+        keyboardView = view as? MiniKeyboardView
+        setInputView(view)
+        applySavedSettings()
+        MiniKeysLog.line(
+            "IME: input view -> " +
+                if (MiniKeysRuntime.overlayAttached) "silent (edge overlay is the keyboard)" else "visible keyboard",
+        )
+    }
 
     private fun applySavedSettings() {
         val view = keyboardView ?: return

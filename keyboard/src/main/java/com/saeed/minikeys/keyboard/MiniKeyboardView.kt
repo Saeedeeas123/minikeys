@@ -279,6 +279,11 @@ class MiniKeyboardView(context: Context) : View(context) {
             KeyAction.Shift -> toggleShift()
             KeyAction.ShowSymbols -> showPage(KeyboardPage.SYMBOLS)
             KeyAction.ShowLetters -> showPage(KeyboardPage.LETTERS)
+
+            // These exist for the vertical edge overlay only: the horizontal layout never puts them
+            // on a key, so reaching this branch is impossible by construction.
+            KeyAction.CapsToggle, KeyAction.ShowEmoji, KeyAction.ShowShortcuts -> Unit
+            is KeyAction.Hardware -> Unit
         }
     }
 
