@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.saeed.minikeys.BuildConfig
+import com.saeed.minikeys.core.settings.KeyboardMode
 import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
 import com.saeed.minikeys.core.llm.LlmProviderPreset
@@ -58,6 +59,7 @@ private const val HEIGHT_STEP_DP = 10
 fun MiniKeysSettingsScreen(state: SettingsScreenState) {
     val context = LocalContext.current
     val buffer = remember { TestFieldBuffer() }
+    val typeBuffer = remember { TestFieldBuffer() }
     val aiState = remember { AiSettingsState(context) }
 
     Column(
@@ -83,8 +85,10 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
         StatusCard(state)
         ThemeCard(state)
         SizeCard(state)
+        ModeCard(state)
         AiCard(aiState)
         PreviewCard(state, buffer)
+        TypeAnywhereCard(typeBuffer)
         SavedSettingsCard(state)
     }
 }
@@ -428,5 +432,74 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
             Spacer(Modifier.height(8.dp))
             content()
         }
+    }
+}
+
+@Composable
+private fun ModeCard(state: SettingsScreenState) {
+    SectionCard(title = "Keyboard mode") {
+        Text(
+            text = "Normal keeps the classic bottom strip. Vertical puts the keys into two scrollable " +
+                "columns along the left and right edges and leaves the middle of the screen to the app.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        KeyboardMode.ALL.forEach { mode ->
+            val selected = mode.id == state.settings.modeId
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+                    )
+                    .clickable { state.setMode(mode.id) }
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = mode.label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = if (selected) "Selected" else "",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
+        if (state.settings.mode == KeyboardMode.VERTICAL) {
+            SliderRow(
+                label = "Column width",
+                valueText = state.settings.columnWidthPercent.toString() + "% of screen",
+                value = state.settings.columnWidthPercent.toFloat(),
+                range = KeyboardSettings.MIN_COLUMN_WIDTH_PERCENT.toFloat()..
+                    KeyboardSettings.MAX_COLUMN_WIDTH_PERCENT.toFloat(),
+                steps = KeyboardSettings.MAX_COLUMN_WIDTH_PERCENT -
+                    KeyboardSettings.MIN_COLUMN_WIDTH_PERCENT - 1,
+                onChange = { state.setColumnWidthPercent(it.roundToInt()) },
+            )
+        }
+
+        Text(
+            text = "Saved immediately. If the keyboard is already open it swaps shape without a " +
+                "restart; otherwise it uses the new mode next time it appears.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun TypeAnywhereCard(buffer: TestFieldBuffer) {
+    SectionCard(title = "Type here (any keyboard)") {
+        Text(
+            text = "Tap the box below and type with MiniKeys — normal or vertical — or with any other " +
+                "keyboard installed on the phone. Plain end-to-end typing check.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        TestField(buffer = buffer, modifier = Modifier.padding(top = 6.dp))
     }
 }

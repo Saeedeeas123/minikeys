@@ -114,3 +114,15 @@ APK, and documented with a step-by-step recipe — so consuming it in an app nev
   touching either the IME or the settings model.
 - Not implemented in v0.1 on purpose: suggestions/dictionary, gesture typing, clipboard, per-app
   themes, multi-language subtypes beyond the en_US subtype declared in `method.xml`.
+
+## Keyboard modes (v0.6.0)
+Two geometries, switchable in Settings → **Keyboard mode** and persisted with the rest of the settings:
+- **Normal** — the classic bottom strip (`MiniKeyboardView`).
+- **Vertical** — `EdgeKeyboardView`: two independent, scrollable key columns hugging the left and
+  right screen edges, middle of the screen left to the app. The IME window goes full height and its
+  touchable region is limited to the two columns, so the middle stays interactive. Keys split
+  left/right (first half of the page left, second half right), with shift/space/page-toggle on the
+  left column and backspace/comma/period/enter on the right. Arrow hints show when a column can
+  still scroll. First key clears the notification bar, last key clears the home bar (real insets).
+A dedicated **Type here (any keyboard)** card in the settings screen gives a plain text box for
+end-to-end typing checks with MiniKeys (either mode) or any other installed keyboard.

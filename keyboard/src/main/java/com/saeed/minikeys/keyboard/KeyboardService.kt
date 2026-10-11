@@ -1,25 +1,34 @@
 package com.saeed.minikeys.keyboard
 
 import android.content.SharedPreferences
+import android.graphics.Rect
+import android.graphics.Region
 import android.inputmethodservice.InputMethodService
 import android.text.InputType
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import com.saeed.minikeys.core.settings.KeyboardMode
 import com.saeed.minikeys.core.settings.KeyboardSettingsStore
 
 /**
  * The IME itself.
  *
- * It owns no layout code: it builds one [MiniKeyboardView], keeps it in sync with the persisted
- * settings (including changes made while the keyboard is on screen) and applies the resulting text
- * edits to the editor through the input connection.
+ * It owns no layout code: it builds the keyboard view that matches the stored mode — the classic
+ * [MiniKeyboardView] strip, or the two-column [EdgeKeyboardView] — keeps it in sync with the
+ * persisted settings (including changes made while the keyboard is on screen) and applies the
+ * resulting text edits to the editor through the input connection.
+ *
+ * Vertical mode also reshapes the IME window: full height, and a touchable region that covers ONLY
+ * the two side columns, so the middle of the screen stays usable by the app behind the keyboard.
  */
 class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
 
     private lateinit var store: KeyboardSettingsStore
-    private var keyboardView: MiniKeyboardView? = null
+    private var currentView: View? = null
+    private var currentMode: KeyboardMode? = null
 
-    /** Lets the settings UI retheme/resize the keyboard live, without restarting the IME. */
+    /** Lets the settings UI retheme/resize/reswitch the keyboard live, without restarting the IME. */
     private val settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         applySavedSettings()
     }
@@ -31,26 +40,74 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     }
 
     override fun onCreateInputView(): View {
-        val view = MiniKeyboardView(this).also { it.listener = this }
-        keyboardView = view
-        applySavedSettings()
+        val settings = store.load()
+        val view = createViewFor(settings.mode)
+        currentView = view
+        currentMode = settings.mode
+        applySettingsToCurrentView()
         return view
+    }
+
+    private fun createViewFor(mode: KeyboardMode): View = when (mode) {
+        KeyboardMode.VERTICAL -> EdgeKeyboardView(this).also { it.listener = this }
+        KeyboardMode.NORMAL -> MiniKeyboardView(this).also { it.listener = this }
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        keyboardView?.setEnterLabel(enterLabelFor(info))
+        setEnterLabel(enterLabelFor(info))
         applySavedSettings()
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        applyWindowShape()
     }
 
     override fun onDestroy() {
         store.removeListener(settingsListener)
-        keyboardView = null
+        currentView = null
+        currentMode = null
         super.onDestroy()
     }
 
-    /** Never take over the whole screen; the app stays visible behind the keyboard. */
+    /** Never take over the whole screen with the extract view; the app stays visible behind. */
     override fun onEvaluateFullscreenMode(): Boolean = false
+
+    /** The vertical keyboard needs the whole screen; the normal keyboard keeps its strip height. */
+    private fun applyWindowShape() {
+        val params = window?.window?.attributes ?: return
+        val vertical = currentMode == KeyboardMode.VERTICAL
+        params.height = if (vertical) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
+        params.width = ViewGroup.LayoutParams.MATCH_PARENT
+        window?.window?.attributes = params
+        window?.window?.decorView?.requestLayout()
+    }
+
+    /**
+     * Only the two side columns are touchable in vertical mode: the middle of the screen keeps
+     * receiving touches, so the app behind the keyboard remains usable while typing.
+     */
+    override fun onComputeInsets(outInsets: Insets) {
+        super.onComputeInsets(outInsets)
+        val settings = store.load()
+        val view = currentView
+        if (settings.mode != KeyboardMode.VERTICAL || view == null) return
+
+        val width = view.width
+        val height = view.height
+        if (width <= 0 || height <= 0) return
+
+        val margin = (resources.displayMetrics.density * 8f).toInt()
+        val columnPx = (width * settings.columnWidthPercent / 100f).toInt() + margin
+        val region: Region = outInsets.touchableRegion
+        region.setEmpty()
+        region.union(Rect(0, 0, columnPx, height))
+        region.union(Rect(width - columnPx, 0, width, height))
+        // The app is considered fully visible: the keyboard only overlays the two side strips.
+        outInsets.contentTopInsets = 0
+        outInsets.visibleTopInsets = 0
+    }
 
     // --- MiniKeyboardView.Listener -------------------------------------------------------------
 
@@ -80,16 +137,37 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     // --- internals ----------------------------------------------------------------------------
 
     private fun applySavedSettings() {
-        val view = keyboardView ?: return
-        view.applySettings(store.load())
+        val settings = store.load()
+        if (currentMode != null && currentMode != settings.mode) {
+            // Mode switch while the keyboard is on screen: swap the whole input view.
+            val view = createViewFor(settings.mode)
+            currentView = view
+            currentMode = settings.mode
+            setInputView(view)
+            applyWindowShape()
+        }
+        applySettingsToCurrentView()
+    }
 
-        // A height change must reach the IME window, not just the view inside it.
+    private fun applySettingsToCurrentView() {
+        val settings = store.load()
+        when (val view = currentView) {
+            is MiniKeyboardView -> view.applySettings(settings)
+            is EdgeKeyboardView -> view.applySettings(settings)
+        }
         if (isInputViewShown) {
-            view.requestLayout()
+            currentView?.requestLayout()
             window?.window?.decorView?.let {
                 it.requestLayout()
                 it.invalidate()
             }
+        }
+    }
+
+    private fun setEnterLabel(label: String) {
+        when (val view = currentView) {
+            is MiniKeyboardView -> view.setEnterLabel(label)
+            is EdgeKeyboardView -> view.setEnterLabel(label)
         }
     }
 

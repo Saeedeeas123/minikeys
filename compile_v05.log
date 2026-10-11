@@ -1,0 +1,102 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.5/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Configuration on demand is an incubating feature.
+
+> Configure project :app
+WARNING: The option setting 'android.aapt2FromMavenOverride=/root/Android/build-tools/35.0.1/aapt2' is experimental.
+This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+Observed package id 'platforms;android-35' in inconsistent location '/root/Android/platforms/android-35-2' (Expected '/root/Android/platforms/android-35')
+
+> Task :keyboard:preBuild UP-TO-DATE
+> Task :keyboard:preDebugBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :keyboard:writeDebugAarMetadata UP-TO-DATE
+> Task :core:llm:preBuild UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :core:llm:preDebugBuild UP-TO-DATE
+> Task :core:settings:preBuild UP-TO-DATE
+> Task :core:settings:preDebugBuild UP-TO-DATE
+> Task :core:llm:writeDebugAarMetadata UP-TO-DATE
+> Task :core:settings:writeDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :keyboard:generateDebugResValues UP-TO-DATE
+> Task :keyboard:generateDebugResources UP-TO-DATE
+> Task :keyboard:packageDebugResources UP-TO-DATE
+> Task :core:llm:generateDebugResValues UP-TO-DATE
+> Task :core:llm:generateDebugResources UP-TO-DATE
+> Task :core:llm:packageDebugResources UP-TO-DATE
+> Task :core:settings:generateDebugResValues UP-TO-DATE
+> Task :core:settings:generateDebugResources UP-TO-DATE
+> Task :core:settings:packageDebugResources UP-TO-DATE
+> Task :keyboard:extractDeepLinksDebug UP-TO-DATE
+> Task :keyboard:processDebugManifest UP-TO-DATE
+> Task :core:llm:extractDeepLinksDebug UP-TO-DATE
+> Task :core:llm:processDebugManifest UP-TO-DATE
+> Task :core:settings:extractDeepLinksDebug UP-TO-DATE
+> Task :core:settings:processDebugManifest UP-TO-DATE
+> Task :keyboard:compileDebugLibraryResources UP-TO-DATE
+> Task :keyboard:parseDebugLocalResources UP-TO-DATE
+> Task :keyboard:generateDebugRFile UP-TO-DATE
+> Task :core:llm:compileDebugLibraryResources UP-TO-DATE
+> Task :core:llm:parseDebugLocalResources UP-TO-DATE
+> Task :core:llm:generateDebugRFile UP-TO-DATE
+> Task :core:settings:compileDebugLibraryResources UP-TO-DATE
+> Task :core:settings:parseDebugLocalResources UP-TO-DATE
+> Task :core:settings:generateDebugRFile UP-TO-DATE
+> Task :keyboard:checkKotlinGradlePluginConfigurationErrors
+> Task :core:settings:checkKotlinGradlePluginConfigurationErrors
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :core:settings:javaPreCompileDebug UP-TO-DATE
+> Task :keyboard:javaPreCompileDebug UP-TO-DATE
+> Task :core:llm:checkKotlinGradlePluginConfigurationErrors
+> Task :core:llm:compileDebugKotlin UP-TO-DATE
+> Task :core:llm:javaPreCompileDebug UP-TO-DATE
+> Task :core:llm:compileDebugJavaWithJavac NO-SOURCE
+> Task :core:llm:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :core:settings:preDebugUnitTestBuild UP-TO-DATE
+> Task :core:settings:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :core:settings:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :core:settings:compileDebugKotlin
+> Task :core:settings:compileDebugJavaWithJavac NO-SOURCE
+> Task :core:settings:bundleLibCompileToJarDebug
+> Task :core:settings:bundleLibRuntimeToJarDebug
+> Task :core:settings:compileDebugUnitTestKotlin
+> Task :core:settings:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :core:settings:processDebugJavaRes UP-TO-DATE
+> Task :core:settings:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :core:settings:testDebugUnitTest
+
+> Task :keyboard:compileDebugKotlin
+e: file:///root/projects/minikeys/keyboard/src/main/java/com/saeed/minikeys/keyboard/KeyboardService.kt:99:22 Type mismatch: inferred type is Region but Rect was expected
+
+> Task :keyboard:compileDebugKotlin FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':keyboard:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 17s
+56 actionable tasks: 10 executed, 46 up-to-date
+RC=1

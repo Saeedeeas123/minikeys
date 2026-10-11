@@ -41,6 +41,12 @@ class SettingsScreenState(context: Context) {
 
     fun setKeyTextSizeSp(textSizeSp: Int) = persist(settings.copy(keyTextSizeSp = textSizeSp))
 
+    /** Switches the keyboard between the bottom strip and the two vertical side columns. */
+    fun setMode(modeId: String) = persist(settings.copy(modeId = modeId))
+
+    /** Width of one vertical column, in percent of the screen width. */
+    fun setColumnWidthPercent(percent: Int) = persist(settings.copy(columnWidthPercent = percent))
+
     fun resetToDefaults() {
         store.reset()
         refreshFromDisk()

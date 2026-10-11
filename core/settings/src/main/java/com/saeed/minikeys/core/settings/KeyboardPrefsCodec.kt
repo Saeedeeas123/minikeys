@@ -11,11 +11,15 @@ object KeyboardPrefsCodec {
     const val KEY_THEME_ID = "theme_id"
     const val KEY_KEYBOARD_HEIGHT_DP = "keyboard_height_dp"
     const val KEY_KEY_TEXT_SIZE_SP = "key_text_size_sp"
+    const val KEY_MODE_ID = "mode_id"
+    const val KEY_COLUMN_WIDTH_PERCENT = "column_width_percent"
 
     fun encode(settings: KeyboardSettings): Map<String, Any> = mapOf(
         KEY_THEME_ID to settings.themeId,
         KEY_KEYBOARD_HEIGHT_DP to settings.keyboardHeightDp,
         KEY_KEY_TEXT_SIZE_SP to settings.keyTextSizeSp,
+        KEY_MODE_ID to settings.modeId,
+        KEY_COLUMN_WIDTH_PERCENT to settings.columnWidthPercent,
     )
 
     /** Never throws: any missing, foreign or out-of-range value degrades to a valid setting. */
@@ -23,6 +27,10 @@ object KeyboardPrefsCodec {
         val themeId = (values[KEY_THEME_ID] as? String)
             ?.takeIf { KeyboardTheme.isKnownId(it) }
             ?: KeyboardTheme.DEFAULT_ID
+
+        val modeId = (values[KEY_MODE_ID] as? String)
+            ?.takeIf { KeyboardMode.isKnownId(it) }
+            ?: KeyboardMode.DEFAULT_ID
 
         return KeyboardSettings(
             themeId = themeId,
@@ -35,6 +43,12 @@ object KeyboardPrefsCodec {
                 raw = values[KEY_KEY_TEXT_SIZE_SP],
                 range = KeyboardSettings.TEXT_SIZE_RANGE,
                 fallback = KeyboardSettings.DEFAULT_TEXT_SIZE_SP,
+            ),
+            modeId = modeId,
+            columnWidthPercent = readInt(
+                raw = values[KEY_COLUMN_WIDTH_PERCENT],
+                range = KeyboardSettings.COLUMN_WIDTH_RANGE,
+                fallback = KeyboardSettings.DEFAULT_COLUMN_WIDTH_PERCENT,
             ),
         )
     }
