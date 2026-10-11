@@ -38,9 +38,9 @@ data class KeyboardSettings(
         val HEIGHT_RANGE = MIN_HEIGHT_DP..MAX_HEIGHT_DP
         val TEXT_SIZE_RANGE = MIN_TEXT_SIZE_SP..MAX_TEXT_SIZE_SP
 
-        const val MIN_COLUMN_WIDTH_PERCENT = 16
-        const val MAX_COLUMN_WIDTH_PERCENT = 42
-        const val DEFAULT_COLUMN_WIDTH_PERCENT = 27
+        const val MIN_COLUMN_WIDTH_PERCENT = 4
+        const val MAX_COLUMN_WIDTH_PERCENT = 12
+        const val DEFAULT_COLUMN_WIDTH_PERCENT = 8
         val COLUMN_WIDTH_RANGE = MIN_COLUMN_WIDTH_PERCENT..MAX_COLUMN_WIDTH_PERCENT
 
         val DEFAULT = KeyboardSettings()

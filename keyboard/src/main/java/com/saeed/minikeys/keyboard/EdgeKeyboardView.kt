@@ -36,6 +36,9 @@ class EdgeKeyboardView(context: Context) : View(context) {
 
     var listener: MiniKeyboardView.Listener? = null
 
+    /** Notified when the view got a real size, so the IME can recompute its touchable region. */
+    var onLayoutChanged: (() -> Unit)? = null
+
     private enum class ShiftState { OFF, ON, LOCKED }
 
     private enum class Column { LEFT, RIGHT }
@@ -128,6 +131,7 @@ class EdgeKeyboardView(context: Context) : View(context) {
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         rebuildGeometry()
+        onLayoutChanged?.invoke()
     }
 
     override fun onAttachedToWindow() {
@@ -176,7 +180,7 @@ class EdgeKeyboardView(context: Context) : View(context) {
     }
 
     private fun columnWidth(): Float =
-        (width * settings.columnWidthPercent / 100f).coerceAtLeast(dp(64f))
+        (width * settings.columnWidthPercent / 100f).coerceAtLeast(dp(22f))
 
     /** Keys of the current page, split into the two thumbs: first half left, second half right. */
     private fun splitKeys(): Pair<List<KeyDef>, List<KeyDef>> {
@@ -267,10 +271,30 @@ class EdgeKeyboardView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(theme.keyboardBackground)
+        // The middle of the window is deliberately NOT painted: only the two side strips get a
+        // background, so the app behind the keyboard stays fully visible in between.
+        drawColumnBackdrop(canvas, leftKeys, leftScroll)
+        drawColumnBackdrop(canvas, rightKeys, rightScroll)
         drawColumn(canvas, leftKeys, leftScroll)
         drawColumn(canvas, rightKeys, rightScroll)
         drawScrollHints(canvas)
+    }
+
+    /** Paints only the strip behind one column (never the middle of the screen). */
+    private fun drawColumnBackdrop(canvas: Canvas, keys: List<PlacedKey>, scroll: Float) {
+        if (keys.isEmpty()) return
+        val first = keys.first().rect
+        val last = keys.last().rect
+        val top = (first.top - scroll).coerceAtLeast(0f)
+        val bottom = (last.bottom - scroll).coerceAtMost(height.toFloat())
+        if (bottom <= top) return
+        keyPaint.color = theme.keyboardBackground
+        canvas.drawRoundRect(
+            RectF(first.left - dp(3f), top, first.right + dp(3f), bottom),
+            cornerRadius,
+            cornerRadius,
+            keyPaint,
+        )
     }
 
     private fun drawColumn(canvas: Canvas, keys: List<PlacedKey>, scroll: Float) {
