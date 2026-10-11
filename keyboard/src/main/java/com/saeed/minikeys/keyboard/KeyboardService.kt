@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import com.saeed.minikeys.core.settings.KeyboardMode
 import com.saeed.minikeys.core.settings.KeyboardSettingsStore
+import com.saeed.minikeys.core.settings.MiniKeysLog
 
 /**
  * The IME itself.
@@ -62,6 +63,9 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     override fun onWindowShown() {
         super.onWindowShown()
         applyWindowShape()
+        // The first insets pass can run before the view has a real size: re-apply once the layout
+        // has settled so the two-strip touchable region comes from real measurements.
+        window?.window?.decorView?.postDelayed({ applyWindowShape() }, 250L)
     }
 
     override fun onDestroy() {
@@ -82,6 +86,10 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
         params.width = ViewGroup.LayoutParams.MATCH_PARENT
         window?.window?.attributes = params
         window?.window?.decorView?.requestLayout()
+        MiniKeysLog.line(
+            "VERTICAL window: mode=" + currentMode + " h=" + params.height +
+                " flags=0x" + Integer.toHexString(params.flags)
+        )
     }
 
     /**
@@ -91,19 +99,26 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     override fun onComputeInsets(outInsets: Insets) {
         super.onComputeInsets(outInsets)
         val settings = store.load()
+        if (settings.mode != KeyboardMode.VERTICAL) return
+        val metrics = resources.displayMetrics
         val view = currentView
-        if (settings.mode != KeyboardMode.VERTICAL || view == null) return
-
-        val width = view.width
-        val height = view.height
+        // Real measurements when the view is attached; screen size before the first layout, so the
+        // two strips are right from the very first insets pass (an empty region would mean
+        // whole-window touchable and the middle would swallow taps).
+        val width = view?.width?.takeIf { it > 0 } ?: metrics.widthPixels
+        val height = view?.height?.takeIf { it > 0 } ?: metrics.heightPixels
         if (width <= 0 || height <= 0) return
-
-        val margin = (resources.displayMetrics.density * 8f).toInt()
+        val margin = (metrics.density * 6f).toInt()
         val columnPx = (width * settings.columnWidthPercent / 100f).toInt() + margin
         val region: Region = outInsets.touchableRegion
         region.setEmpty()
         region.union(Rect(0, 0, columnPx, height))
         region.union(Rect(width - columnPx, 0, width, height))
+        MiniKeysLog.line(
+            "VERTICAL insets: viewW=" + (view?.width ?: 0) + " usedW=" + width +
+                " usedH=" + height + " strip=" + columnPx + "px " +
+                settings.columnWidthPercent + "% bounds=" + region.bounds
+        )
         // The app is considered fully visible: the keyboard only overlays the two side strips.
         outInsets.contentTopInsets = 0
         outInsets.visibleTopInsets = 0

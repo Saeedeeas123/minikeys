@@ -1,4 +1,4 @@
-package com.saeed.minikeys.ui
+package com.saeed.minikeys.core.settings
 
 import android.content.ContentValues
 import android.content.Context

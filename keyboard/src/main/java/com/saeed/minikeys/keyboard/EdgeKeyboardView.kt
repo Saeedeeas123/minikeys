@@ -361,13 +361,20 @@ class EdgeKeyboardView(context: Context) : View(context) {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Middle of the screen is NOT ours: do not consume, do not press anything.
+                if (!isInsideStrip(event.x)) {
+                    clearPress()
+                    dragColumn = null
+                    dragging = false
+                    return false
+                }
                 parent?.requestDisallowInterceptTouchEvent(true)
                 val column = columnAt(event.x)
                 dragColumn = column
                 dragStartY = event.y
                 dragStartScroll = if (column == Column.LEFT) leftScroll else rightScroll
                 dragging = false
-                updatePressed(column, event.y)
+                updatePressed(column, event.x, event.y)
                 return true
             }
 
@@ -376,6 +383,10 @@ class EdgeKeyboardView(context: Context) : View(context) {
                 if (!dragging && kotlin.math.abs(event.y - dragStartY) > touchSlop) {
                     dragging = true
                     clearPress()
+                }
+                if (!isInsideStrip(event.x) && !dragging) {
+                    clearPress()
+                    return false
                 }
                 if (dragging) {
                     val delta = dragStartScroll - (event.y - dragStartY)
@@ -386,14 +397,18 @@ class EdgeKeyboardView(context: Context) : View(context) {
                     }
                     invalidate()
                 } else {
-                    updatePressed(column, event.y)
+                    updatePressed(column, event.x, event.y)
                 }
                 return true
             }
 
             MotionEvent.ACTION_UP -> {
                 val column = dragColumn
-                val key = if (column != null && !dragging) keyAt(column, event.y) else null
+                val key = if (column != null && !dragging && isInsideStrip(event.x)) {
+                    keyAt(column, event.x, event.y)
+                } else {
+                    null
+                }
                 val repeatsHandledPress = pressedKey?.action == KeyAction.Backspace && backspaceRepeatFired
                 clearPress()
                 dragColumn = null
@@ -421,17 +436,27 @@ class EdgeKeyboardView(context: Context) : View(context) {
     private fun scrollOf(column: Column): Float =
         if (column == Column.LEFT) leftScroll else rightScroll
 
-    private fun keyAt(column: Column, y: Float): KeyDef? {
+    /**
+     * Hit test for one column. BOTH axes are checked: the middle of the screen belongs to the app,
+     * so a tap outside the column's own x-range must never resolve to a key.
+     */
+    private fun keyAt(column: Column, x: Float, y: Float): KeyDef? {
         val scroll = scrollOf(column)
         return keysOf(column).firstOrNull {
             val top = it.rect.top - scroll
             val bottom = it.rect.bottom - scroll
-            y >= top && y <= bottom
+            x >= it.rect.left && x <= it.rect.right && y >= top && y <= bottom
         }?.key
     }
 
-    private fun updatePressed(column: Column, y: Float) {
-        val key = keyAt(column, y)
+    /** True when x falls inside one of the two key strips (the only touchable area). */
+    fun isInsideStrip(x: Float): Boolean {
+        val colW = columnWidth()
+        return x <= sideMargin + colW || x >= width - sideMargin - colW
+    }
+
+    private fun updatePressed(column: Column, x: Float, y: Float) {
+        val key = keyAt(column, x, y)
         if (key === pressedKey) return
         if (pressedKey?.action == KeyAction.Backspace) cancelBackspaceRepeat()
         pressedKey = key

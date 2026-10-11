@@ -1,7 +1,7 @@
 package com.saeed.minikeys
 
 import android.app.Application
-import com.saeed.minikeys.ui.MiniKeysLog
+import com.saeed.minikeys.core.settings.MiniKeysLog
 
 /**
  * Registers a last-resort uncaught-exception handler that exports the stack trace + the

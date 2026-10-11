@@ -44,6 +44,7 @@ import com.saeed.minikeys.BuildConfig
 import com.saeed.minikeys.core.settings.KeyboardMode
 import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
+import com.saeed.minikeys.core.settings.MiniKeysLog
 import com.saeed.minikeys.core.llm.LlmProviderPreset
 import kotlin.math.roundToInt
 
@@ -488,6 +489,20 @@ private fun ModeCard(state: SettingsScreenState) {
                 "restart; otherwise it uses the new mode next time it appears.",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 6.dp),
+        )
+
+        val context = LocalContext.current
+        OutlinedButton(
+            onClick = { MiniKeysLog.flush(context, "keyboard") },
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Text("Export keyboard log")
+        }
+        Text(
+            text = "Writes MiniKeys-*.log into /sdcard/Download: mode switches, computed touch " +
+                "strips and any crash. Useful when the middle of the screen misbehaves.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 4.dp),
         )
     }
 }
