@@ -40,10 +40,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.saeed.minikeys.BuildConfig
-import com.saeed.minikeys.core.settings.KeyboardMode
 import com.saeed.minikeys.core.settings.KeyboardSettings
 import com.saeed.minikeys.core.settings.KeyboardTheme
+import com.saeed.minikeys.core.settings.OverlaySettings
 import com.saeed.minikeys.core.settings.MiniKeysLog
 import com.saeed.minikeys.core.llm.LlmProviderPreset
 import kotlin.math.roundToInt
@@ -61,6 +67,7 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
     val context = LocalContext.current
     val buffer = remember { TestFieldBuffer() }
     val typeBuffer = remember { TestFieldBuffer() }
+    val overlayState = remember { OverlayState(context) }
     val aiState = remember { AiSettingsState(context) }
 
     Column(
@@ -86,7 +93,7 @@ fun MiniKeysSettingsScreen(state: SettingsScreenState) {
         StatusCard(state)
         ThemeCard(state)
         SizeCard(state)
-        ModeCard(state)
+        EdgeOverlayCard(overlayState)
         AiCard(aiState)
         PreviewCard(state, buffer)
         TypeAnywhereCard(typeBuffer)
@@ -437,77 +444,6 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ModeCard(state: SettingsScreenState) {
-    SectionCard(title = "Keyboard mode") {
-        Text(
-            text = "Normal keeps the classic bottom strip. Vertical puts the keys into two scrollable " +
-                "columns along the left and right edges and leaves the middle of the screen to the app.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-
-        KeyboardMode.ALL.forEach { mode ->
-            val selected = mode.id == state.settings.modeId
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
-                    )
-                    .clickable { state.setMode(mode.id) }
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = mode.label,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = if (selected) "Selected" else "",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-
-        if (state.settings.mode == KeyboardMode.VERTICAL) {
-            SliderRow(
-                label = "Column width",
-                valueText = state.settings.columnWidthPercent.toString() + "% of screen",
-                value = state.settings.columnWidthPercent.toFloat(),
-                range = KeyboardSettings.MIN_COLUMN_WIDTH_PERCENT.toFloat()..
-                    KeyboardSettings.MAX_COLUMN_WIDTH_PERCENT.toFloat(),
-                steps = KeyboardSettings.MAX_COLUMN_WIDTH_PERCENT -
-                    KeyboardSettings.MIN_COLUMN_WIDTH_PERCENT - 1,
-                onChange = { state.setColumnWidthPercent(it.roundToInt()) },
-            )
-        }
-
-        Text(
-            text = "Saved immediately. If the keyboard is already open it swaps shape without a " +
-                "restart; otherwise it uses the new mode next time it appears.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-
-        val context = LocalContext.current
-        OutlinedButton(
-            onClick = { MiniKeysLog.flush(context, "keyboard") },
-            modifier = Modifier.padding(top = 8.dp),
-        ) {
-            Text("Export keyboard log")
-        }
-        Text(
-            text = "Writes MiniKeys-*.log into /sdcard/Download: mode switches, computed touch " +
-                "strips and any crash. Useful when the middle of the screen misbehaves.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
-}
-
-@Composable
 private fun TypeAnywhereCard(buffer: TestFieldBuffer) {
     SectionCard(title = "Type here (any keyboard)") {
         Text(
@@ -516,5 +452,92 @@ private fun TypeAnywhereCard(buffer: TestFieldBuffer) {
             style = MaterialTheme.typography.bodySmall,
         )
         TestField(buffer = buffer, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EdgeOverlayCard(state: OverlayState) {
+    val context = LocalContext.current
+    SectionCard(title = "Edge overlay (always-on keys)") {
+        Text(
+            text = "Two key strips pinned to the left and right screen edges, on top of every app. " +
+                "The middle of the screen is NOT covered by them, so taps and scrolling there go " +
+                "straight to the app you are using. Keys are visual for now — per-app shortcut " +
+                "actions come next.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        StatusRow(label = "Overlay permission (draw over other apps)", value = state.hasOverlayPermission)
+        StatusRow(label = "Strips running", value = state.running)
+
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(onClick = { state.openOverlayPermissionSettings() }) {
+                Text("Grant overlay permission")
+            }
+            OutlinedButton(onClick = { state.refresh() }) { Text("Refresh") }
+        }
+
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(onClick = { state.setEnabled(!state.settings.enabled) }) {
+                Text(if (state.settings.enabled) "Turn overlay OFF" else "Turn overlay ON")
+            }
+            OutlinedButton(onClick = { state.exportLog() }) { Text("Export log") }
+        }
+
+        SliderRow(
+            label = "Strip width",
+            valueText = state.settings.columnWidthPercent.toString() + "% of screen",
+            value = state.settings.columnWidthPercent.toFloat(),
+            range = OverlaySettings.MIN_COLUMN_WIDTH_PERCENT.toFloat()..
+                OverlaySettings.MAX_COLUMN_WIDTH_PERCENT.toFloat(),
+            steps = OverlaySettings.MAX_COLUMN_WIDTH_PERCENT -
+                OverlaySettings.MIN_COLUMN_WIDTH_PERCENT - 1,
+            onChange = { state.setColumnWidthPercent(it.roundToInt()) },
+        )
+        SliderRow(
+            label = "Key height",
+            valueText = state.settings.keyHeightDp.toString() + " dp",
+            value = state.settings.keyHeightDp.toFloat(),
+            range = OverlaySettings.MIN_KEY_HEIGHT_DP.toFloat()..OverlaySettings.MAX_KEY_HEIGHT_DP.toFloat(),
+            steps = OverlaySettings.MAX_KEY_HEIGHT_DP - OverlaySettings.MIN_KEY_HEIGHT_DP - 1,
+            onChange = { state.setKeyHeightDp(it.roundToInt()) },
+        )
+        SliderRow(
+            label = "Key label size",
+            valueText = state.settings.keyTextSizeSp.toString() + " sp",
+            value = state.settings.keyTextSizeSp.toFloat(),
+            range = OverlaySettings.MIN_KEY_TEXT_SIZE_SP.toFloat()..OverlaySettings.MAX_KEY_TEXT_SIZE_SP.toFloat(),
+            steps = OverlaySettings.MAX_KEY_TEXT_SIZE_SP - OverlaySettings.MIN_KEY_TEXT_SIZE_SP - 1,
+            onChange = { state.setKeyTextSizeSp(it.roundToInt()) },
+        )
+
+        val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsNotificationPermission) {
+            val launcher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { }
+            Button(
+                onClick = { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text("Allow notifications (for the ON/OFF control)")
+            }
+        }
+
+        Text(
+            text = "Turn the strips off any time from the notification (“Turn off”) or with the " +
+                "button above. Size changes apply immediately while the strips are running.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }

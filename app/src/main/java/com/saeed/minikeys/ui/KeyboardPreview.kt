@@ -9,8 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.saeed.minikeys.core.settings.KeyboardSettings
-import com.saeed.minikeys.core.settings.KeyboardMode
-import com.saeed.minikeys.keyboard.EdgeKeyboardView
 import com.saeed.minikeys.keyboard.MiniKeyboardView
 import kotlin.math.max
 import kotlin.math.min
@@ -63,37 +61,21 @@ fun KeyboardPreview(
     buffer: TestFieldBuffer,
     modifier: Modifier = Modifier,
 ) {
-    val vertical = settings.mode == KeyboardMode.VERTICAL
-    val previewHeight = if (vertical) 420.dp else settings.keyboardHeightDp.dp
-
     AndroidView(
         modifier = modifier
             .fillMaxWidth()
-            .height(previewHeight),
+            .height(settings.keyboardHeightDp.dp),
         factory = { context ->
-            val listener = object : MiniKeyboardView.Listener {
-                override fun onText(text: String) = buffer.insert(text)
-                override fun onBackspace() = buffer.deleteBackward()
-                override fun onEnter() = buffer.insert("\n")
-            }
-            if (vertical) {
-                EdgeKeyboardView(context).also { view ->
-                    view.listener = listener
-                    view.applySettings(settings)
+            MiniKeyboardView(context).also { view ->
+                view.listener = object : MiniKeyboardView.Listener {
+                    override fun onText(text: String) = buffer.insert(text)
+                    override fun onBackspace() = buffer.deleteBackward()
+                    override fun onEnter() = buffer.insert("\n")
                 }
-            } else {
-                MiniKeyboardView(context).also { view ->
-                    view.listener = listener
-                    view.applySettings(settings)
-                }
+                view.applySettings(settings)
             }
         },
-        update = { view ->
-            when (view) {
-                is EdgeKeyboardView -> view.applySettings(settings)
-                is MiniKeyboardView -> view.applySettings(settings)
-            }
-        },
+        update = { view -> view.applySettings(settings) },
     )
 }
 

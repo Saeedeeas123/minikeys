@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        The overlay service. The consuming app must declare SYSTEM_ALERT_WINDOW,
+        FOREGROUND_SERVICE, FOREGROUND_SERVICE_SPECIAL_USE and POST_NOTIFICATIONS.
+    -->
+    <application>
+        <service
+            android:name="com.saeed.minikeys.edgeoverlay.EdgeOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="always_on_edge_shortcut_strips" />
+        </service>
+    </application>
+</manifest>
