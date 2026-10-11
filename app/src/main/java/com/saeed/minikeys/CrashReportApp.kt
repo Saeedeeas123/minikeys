@@ -13,8 +13,6 @@ class CrashReportApp : Application() {
     override fun onCreate() {
         super.onCreate()
         MiniKeysLog.line("app onCreate")
-        // Offline LLM modules were removed on 2026-10-10; reclaim their imported model files.
-        Thread { LegacyOfflineModels.removeOnce(this) }.start()
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             MiniKeysLog.line("UNCAUGHT on thread " + thread.name)

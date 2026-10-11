@@ -79,7 +79,32 @@ cd /root/projects/minikeys
 cp -f app/build/outputs/apk/debug/app-debug.apk /sdcard/Download/minikeys-debug.apk
 ```
 
-## Extension points (next modules)
+## Roadmap
+
+### Module policy (2026-10-10)
+
+MiniKeys is a **consumer** of the standalone modules kept in `/sdcard/Documents/Operit_Modules/`
+(see `README.md` and `CATALOG.md` there). A module is written once, stored separately, proven by an
+APK, and documented with a step-by-step recipe — so consuming it in an app never means re-debugging.
+
+| Module | What it gives this app | Status |
+|---|---|---|
+| `minikeys-keyboard` | the IME itself + settings model (this repo) | accepted |
+| `core-llm` | online LLM: OpenAI-compatible client + Keystore key vault | accepted |
+| `core-litertlm` | offline LLM: `.litertlm` model loader (LiteRT-LM) | accepted |
+
+### LLM status in this app
+
+- **Offline LLM engines were removed permanently on 2026-10-10** (commit `da77b2f`, app v0.5.0):
+  `:core:mediapipe` and `:core:llama` never worked reliably, so their modules, settings cards, state
+  holders and imported model data were deleted. Any leftover references were cleaned on 2026-10-10.
+- The earlier standing order *"do not add an LLM to MiniKeys"* is **revoked** — an LLM may be added
+  here again. When that happens it comes from the modules area: `core-llm` (online, the proven one) or
+  `core-litertlm` (offline), never a re-derived one-off.
+- The **cloud AI card** (`core-llm`: OpenAI-compatible client + Keystore vault, with LAN-server
+  presets for llama.cpp server / Ollama / LM Studio) is kept and is the only LLM surface in the app.
+
+### Extension points (next modules)
 
 - `KeyboardLayouts.rowsFor(page)` is pure data: a Persian layout, an emoji page or a numeric pad is a
   new page + row list, no drawing/input code changes.
