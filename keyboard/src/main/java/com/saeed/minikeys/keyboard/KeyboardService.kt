@@ -9,6 +9,7 @@ import android.view.inputmethod.EditorInfo
 import com.saeed.minikeys.core.settings.KeyboardSettingsStore
 import com.saeed.minikeys.core.settings.MiniKeysLog
 import com.saeed.minikeys.core.settings.MiniKeysRuntime
+import com.saeed.minikeys.perception.ActivityShortcuts
 
 /**
  * The IME. It has two faces, decided by whether the always-on edge overlay is attached:
@@ -35,12 +36,23 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     /** The edge overlay appeared or disappeared → swap between the silent and the visible face. */
     private val runtimeListener: () -> Unit = { refreshInputView() }
 
+    /**
+     * The activity in front changed, so the shortcut page has a different key set. The visible
+     * keyboard must rebuild its geometry — the keys themselves are different, not just their colour.
+     */
+    private val activityKeysListener: () -> Unit = {
+        activityKeysListenerTarget()?.refreshKeys()
+    }
+
+    private fun activityKeysListenerTarget(): MiniKeyboardView? = keyboardView
+
     override fun onCreate() {
         super.onCreate()
         MiniKeysLog.attach(this)
         store = KeyboardSettingsStore.from(this)
         store.addListener(settingsListener)
         MiniKeysRuntime.addListener(runtimeListener)
+        ActivityShortcuts.addListener(activityKeysListener)
         MiniKeysLog.line("IME: service created (overlay attached=" + MiniKeysRuntime.overlayAttached + ")")
     }
 
@@ -71,6 +83,7 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
     override fun onDestroy() {
         KeyDispatcher.attach(null)
         MiniKeysRuntime.removeListener(runtimeListener)
+        ActivityShortcuts.removeListener(activityKeysListener)
         runCatching { store.removeListener(settingsListener) }
         keyboardView = null
         MiniKeysLog.line("IME: service destroyed")
@@ -103,6 +116,15 @@ class KeyboardService : InputMethodService(), MiniKeyboardView.Listener {
         if (multiline || !sendDefaultEditorAction(true)) {
             connection.commitText("\n", 1)
         }
+    }
+
+    /**
+     * An activity key: the app in front has its real element pressed through the screen reader — the
+     * keyboard offers the current activity's actions as keys. Nothing is typed.
+     */
+    override fun onActivityFunction(index: Int) {
+        val result = KeyDispatcher.dispatch(KeyAction.RunActivityFunction(index))
+        MiniKeysLog.line("IME: activity key #$index -> $result")
     }
 
     // --- internals ----------------------------------------------------------------------------

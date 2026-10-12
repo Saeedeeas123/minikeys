@@ -9,3 +9,4 @@ captures/
 .cxx/
 *-build.log
 build_v*.log
+build_v09*.log

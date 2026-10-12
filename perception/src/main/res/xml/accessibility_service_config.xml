@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  flagRetrieveInteractiveWindows → `getWindows()` becomes available, which is how the ACTIVE
+  application window is identified when several apps are open (only one is active).
+  flagReportViewIds            → readable ids (pkg:id/send_button) to label keys with.
+  flagIncludeNotImportantViews → keeps controls that are not marked important, which is where many
+                                 real buttons hide.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/perception_a11y_description"
+    android:notificationTimeout="150"
+    android:summary="@string/perception_a11y_summary" />

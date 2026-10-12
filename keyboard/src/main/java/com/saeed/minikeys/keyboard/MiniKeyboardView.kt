@@ -32,6 +32,12 @@ class MiniKeyboardView(context: Context) : View(context) {
         fun onText(text: String)
         fun onBackspace()
         fun onEnter()
+
+        /**
+         * An activity key was pressed: run function [index] of the app in front through the screen
+         * reader. The view stays a pure presenter — it reports the intent, the IME service routes it.
+         */
+        fun onActivityFunction(index: Int)
     }
 
     var listener: Listener? = null
@@ -280,11 +286,24 @@ class MiniKeyboardView(context: Context) : View(context) {
             KeyAction.ShowSymbols -> showPage(KeyboardPage.SYMBOLS)
             KeyAction.ShowLetters -> showPage(KeyboardPage.LETTERS)
 
+            // The activity keys of the shortcut page: run the function in the app in front.
+            is KeyAction.RunActivityFunction -> listener?.onActivityFunction(action.index)
+
             // These exist for the vertical edge overlay only: the horizontal layout never puts them
             // on a key, so reaching this branch is impossible by construction.
             KeyAction.CapsToggle, KeyAction.ShowEmoji, KeyAction.ShowShortcuts -> Unit
             is KeyAction.Hardware -> Unit
         }
+    }
+
+    /**
+     * The shortcut page's content just changed (the user moved to another activity). Geometry has to be
+     * rebuilt, not merely redrawn, because the key set itself is different — and the labels live in the
+     * placed keys.
+     */
+    fun refreshKeys() {
+        rebuildGeometry()
+        invalidate()
     }
 
     private fun toggleShift() {

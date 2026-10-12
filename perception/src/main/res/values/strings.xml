@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="perception_a11y_label">MiniKeys screen reader</string>
+    <string name="perception_a11y_summary">Lets the shortcut keys act on the app in front: reads which activity is open and which buttons it offers.</string>
+    <string name="perception_a11y_description">MiniKeys reads the window that is currently in front to build its shortcut keys: the app and activity that are open, and the actions that screen offers (tap, input, scroll, toggle). No content is stored or sent anywhere; the tree is read while the service is enabled and is used only to run the key you press.</string>
+</resources>

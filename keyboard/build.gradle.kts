@@ -21,5 +21,8 @@ android {
 }
 
 dependencies {
+    // :core:settings — persistence, theming and the log.
     api(project(":core:settings"))
+    // :perception — the screen reader that supplies the per-activity shortcut keys.
+    api(project(":perception"))
 }

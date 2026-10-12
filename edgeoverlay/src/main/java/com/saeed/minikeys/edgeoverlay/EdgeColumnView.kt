@@ -110,6 +110,15 @@ class EdgeColumnView(context: Context) : View(context) {
         invalidate()
     }
 
+    /**
+     * The activity in front changed, so the shortcut page has a different key set: rebuild the strip
+     * from the new keys. Called through `ActivityShortcuts`' listener, from the overlay service.
+     */
+    fun refreshKeys() {
+        rebuild()
+        invalidate()
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         setOnApplyWindowInsetsListener { _, insets ->
@@ -179,7 +188,7 @@ class EdgeColumnView(context: Context) : View(context) {
         scroll = scroll.coerceIn(0f, (contentHeight - height).coerceAtLeast(0f))
     }
 
-    private fun labelOf(key: KeyDef): String = when (val action = key.action) {
+    private fun labelOf(key: KeyDef): String = when (key.action) {
         is KeyAction.Text -> key.label
         KeyAction.CapsToggle -> if (caps) "⇪" else "⇧"
         else -> key.label

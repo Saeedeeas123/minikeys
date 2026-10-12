@@ -1,6 +1,7 @@
 package com.saeed.minikeys.keyboard
 
 import android.view.KeyEvent
+import com.saeed.minikeys.perception.ActivityShortcuts
 
 /**
  * What a key press means. The keyboard views never talk to the editor directly — they report these
@@ -33,6 +34,15 @@ sealed interface KeyAction {
     object ShowLetters : KeyAction
     object ShowEmoji : KeyAction
     object ShowShortcuts : KeyAction
+
+    /**
+     * An **activity key**: run the function with this index of the activity that is currently in
+     * front, through the screen reader — the real element is pressed, nothing is typed.
+     *
+     * This is the whole point of the shortcut page being per-activity: the page's content is not a
+     * constant list any more, it is whatever the app in front offers (see [KeyboardLayouts]).
+     */
+    data class RunActivityFunction(val index: Int) : KeyAction
 }
 
 /** One key: an intent, the glyph drawn on it and its relative width inside its row. */
@@ -67,7 +77,7 @@ object KeyboardLayouts {
         KeyboardPage.SYMBOLS -> SYMBOLS
         // Not used by the horizontal keyboard today; chunked so it degrades instead of crashing.
         KeyboardPage.EMOJI -> EMOJI.chunked(KEYS_PER_HORIZONTAL_ROW)
-        KeyboardPage.SHORTCUTS -> SHORTCUTS.chunked(KEYS_PER_HORIZONTAL_ROW)
+        KeyboardPage.SHORTCUTS -> shortcutKeys().chunked(KEYS_PER_HORIZONTAL_ROW)
     }
 
     private fun letter(ch: String) = KeyDef(KeyAction.Text(ch, letter = true), ch)
@@ -126,7 +136,24 @@ object KeyboardLayouts {
 
         KeyboardPage.SYMBOLS -> SYMBOL_ORDER.map(::symbol)
         KeyboardPage.EMOJI -> EMOJI
-        KeyboardPage.SHORTCUTS -> SHORTCUTS
+        KeyboardPage.SHORTCUTS -> shortcutKeys()
+    }
+
+    /**
+     * The shortcut page: **the activity's own keys first, then the fixed Windows combinations.**
+     *
+     * The top block is rebuilt from whatever app is in front (see `ActivityShortcuts`), so pressing
+     * the ⌃ key shows the actions of the screen you are on — "Send", "Switch model", "Terminal" — and
+     * the keyboard's key set changes with the activity. The Windows combinations stay below as the
+     * constants that are always available, and when the screen reader is off the page is exactly what
+     * it was before: only those constants.
+     */
+    private fun shortcutKeys(): List<KeyDef> {
+        val activity = ActivityShortcuts.keys.map { item ->
+            // Wider than a letter key: activity labels are words ("Switch model"), not glyphs.
+            KeyDef(KeyAction.RunActivityFunction(item.index), item.label, weight = 2f)
+        }
+        return activity + WINDOWS_SHORTCUTS
     }
 
     /** Function keys, in the order they were asked for: space, backspace, delete, enter, … */
@@ -180,8 +207,11 @@ object KeyboardLayouts {
      * The common Windows shortcut combinations, implemented in full and independently of what the
      * current activity happens to be. Each one is sent as a real key event with its modifier state;
      * if the app in front handles it, it works, and if it does not, nothing happens.
+     *
+     * These are the *constants* of the shortcut page; the activity's own keys are added above them by
+     * [shortcutKeys].
      */
-    private val SHORTCUTS: List<KeyDef> = listOf(
+    private val WINDOWS_SHORTCUTS: List<KeyDef> = listOf(
         combo("⌃A", KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON),
         combo("⌃C", KeyEvent.KEYCODE_C, KeyEvent.META_CTRL_ON),
         combo("⌃V", KeyEvent.KEYCODE_V, KeyEvent.META_CTRL_ON),

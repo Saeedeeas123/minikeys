@@ -23,9 +23,10 @@ dependencyResolutionManagement {
 rootProject.name = "MiniKeys"
 
 // Modular layout: one Gradle module per concern; dependency flow is one-way
-// :app -> :keyboard -> :core:settings
+// :app -> :keyboard -> :perception -> :core:settings
 include(":app")
 include(":keyboard")
+include(":perception")
 include(":core:settings")
 include(":core:llm")
 include(":edgeoverlay")

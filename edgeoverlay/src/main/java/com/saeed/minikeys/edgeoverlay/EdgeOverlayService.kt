@@ -22,6 +22,7 @@ import com.saeed.minikeys.core.settings.OverlaySettings
 import com.saeed.minikeys.core.settings.OverlaySettingsStore
 import com.saeed.minikeys.keyboard.KeyDispatcher
 import com.saeed.minikeys.keyboard.KeyboardPage
+import com.saeed.minikeys.perception.ActivityShortcuts
 
 /**
  * Always-on EDGE OVERLAY — the two vertical key strips, and the ON/OFF control in the notification.
@@ -70,6 +71,15 @@ class EdgeOverlayService : Service() {
     /** The IME opens and closes its connection as text fields gain and lose focus. */
     private val connectionListener: () -> Unit = { refreshNotificationIfNeeded() }
 
+    /**
+     * The activity in front changed → the shortcut page's key set is different → both strips are
+     * rebuilt from the new keys (this is what makes the ⌃ page per-activity on the edge overlay too).
+     */
+    private val activityKeysListener: () -> Unit = {
+        leftView?.refreshKeys()
+        rightView?.refreshKeys()
+    }
+
     override fun onCreate() {
         super.onCreate()
         MiniKeysLog.attach(this)
@@ -78,6 +88,7 @@ class EdgeOverlayService : Service() {
         store.rawValues() // touch the store so the preferences file exists for the listener
         store.addListener(prefsListener)
         KeyDispatcher.addConnectionListener(connectionListener)
+        ActivityShortcuts.addListener(activityKeysListener)
         createChannel()
         MiniKeysLog.line("EDGE overlay: service created (enabled=" + store.load().enabled + ")")
     }
@@ -107,6 +118,7 @@ class EdgeOverlayService : Service() {
 
     override fun onDestroy() {
         KeyDispatcher.removeConnectionListener(connectionListener)
+        ActivityShortcuts.removeListener(activityKeysListener)
         runCatching { store.removeListener(prefsListener) }
         detachStrips("service destroyed")
         MiniKeysLog.line("EDGE overlay: service destroyed")

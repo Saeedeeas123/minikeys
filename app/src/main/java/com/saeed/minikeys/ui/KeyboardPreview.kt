@@ -71,6 +71,12 @@ fun KeyboardPreview(
                     override fun onText(text: String) = buffer.insert(text)
                     override fun onBackspace() = buffer.deleteBackward()
                     override fun onEnter() = buffer.insert("\n")
+
+                    /**
+                     * Activity keys belong to the real IME, not to a preview: the preview exists to
+                     * show theme and size, and pressing one here must not act on another app.
+                     */
+                    override fun onActivityFunction(index: Int) = Unit
                 }
                 view.applySettings(settings)
             }

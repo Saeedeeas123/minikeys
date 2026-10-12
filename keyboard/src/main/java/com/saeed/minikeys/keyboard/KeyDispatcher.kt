@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import com.saeed.minikeys.core.settings.MiniKeysLog
+import com.saeed.minikeys.perception.ActivityShortcuts
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -54,6 +55,11 @@ object KeyDispatcher {
      * so the log says for every press what was sent and whether the app took it.
      */
     fun dispatch(action: KeyAction): String {
+        // An activity key is the one action that needs NO text field: it presses a real element of the
+        // app in front through the screen reader, so it must be handled before the connection check
+        // below — otherwise the keys would silently do nothing whenever the screen has no input focus.
+        if (action is KeyAction.RunActivityFunction) return ActivityShortcuts.run(action.index)
+
         val editor = connection ?: return "no text field focused — nothing sent"
 
         return try {

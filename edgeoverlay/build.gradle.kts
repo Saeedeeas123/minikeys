@@ -21,4 +21,6 @@ dependencies {
     api(project(":core:settings"))
     implementation(libs.androidx.core.ktx)
     implementation(project(":keyboard"))
+    // The strips re-render when the activity's key set changes.
+    implementation(project(":perception"))
 }
